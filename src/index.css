@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    /* Default Passion Orange (slightly less vibrant: #F57C00 equivalent) */
+    --primary: 245 124 0;
+  }
+
+  body {
+    @apply bg-neutral-bg text-neutral-text antialiased;
+  }
+}
+
+/* Custom scrollbar for webkit */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-neutral-border rounded-full hover:bg-neutral-muted;
+}

@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from 'react';
 
-import { Todo, TimerState, formatTime, getDateKey } from '@/lib/types';
+import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, formatTime, getDateKey } from '@/lib/types';
 import {
   createSubject as dbCreateSubject,
   saveSubject,
@@ -23,6 +23,8 @@ import {
   clearTimerState,
   initializeStorage,
   recomputeDailyStats,
+  getPomodoroSettings,
+  savePomodoroSettings,
 } from '@/lib/storage';
 import {
   createInitialState,
@@ -54,6 +56,8 @@ interface TimerContextType {
   todayTotalFocus: number;
   activeSubject: SubjectWithStats | null;
   formatTime: (seconds: number) => string;
+  pomodoroSettings: PomodoroSettings;
+  updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -63,20 +67,25 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [todos, setTodos] = useState<Todo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [timerState, dispatch] = useReducer(timerReducer, createInitialState());
+  const [pomodoroSettings, setPomodoroSettings] = useState<PomodoroSettings>(DEFAULT_POMODORO);
   const [displayTimes, setDisplayTimes] = useState<DisplayTimes>({
     sessionDuration: 0,
     currentFocus: 0,
     currentBreak: 0,
     currentSegment: 0,
+    pomodoroRemaining: DEFAULT_POMODORO.focusDuration,
   });
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingSessionRef = useRef<{ id: string; subjectId: string } | null>(null);
+  const pomodoroAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     async function init() {
       await initializeStorage();
       await refreshSubjects();
       await refreshTodos();
+      const savedPomodoro = getPomodoroSettings();
+      setPomodoroSettings(savedPomodoro);
       const savedState = getTimerState();
       if (savedState && savedState.mode !== 'idle') {
         clearTimerState();
@@ -89,7 +98,20 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (timerState.mode !== 'idle') {
       tickIntervalRef.current = setInterval(() => {
-        setDisplayTimes(getDisplayTimes(timerState));
+        const times = getDisplayTimes(timerState, pomodoroSettings);
+        setDisplayTimes(times);
+
+        if (pomodoroSettings.enabled && times.pomodoroRemaining === 0) {
+          if (timerState.mode === 'focusing') {
+            playNotificationSound();
+            dispatch({ type: 'POMODORO_FOCUS_COMPLETE', settings: pomodoroSettings });
+            exitFullscreen();
+          } else if (timerState.mode === 'break') {
+            playNotificationSound();
+            dispatch({ type: 'POMODORO_BREAK_COMPLETE' });
+            enterFullscreen();
+          }
+        }
       }, 100);
     } else {
       if (tickIntervalRef.current) {
@@ -101,6 +123,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         currentFocus: 0,
         currentBreak: 0,
         currentSegment: 0,
+        pomodoroRemaining: pomodoroSettings.focusDuration,
       });
     }
 
@@ -109,7 +132,16 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         clearInterval(tickIntervalRef.current);
       }
     };
-  }, [timerState.mode, timerState.focusStartedAt, timerState.breakStartedAt]);
+  }, [timerState.mode, timerState.focusStartedAt, timerState.breakStartedAt, pomodoroSettings]);
+
+  const playNotificationSound = useCallback(() => {
+    try {
+      if (!pomodoroAudioRef.current) {
+        pomodoroAudioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQwLTq3a6KpZBwd/2smmUAwFcNvJnE8FAnPizplPBAFv59SfUAQBcfLgqFkGAnj/9bVlCQJ5AP/HdQ0DeAH/0H8PA3oC/9aGEAR8A//aiRIEfgP/3YsTBH8E/9+OFASAAv/gjxQEgAL/4I8UBIAC/9+OFAR/BP/djBMEfgP/2okSBHwD/9aGEAN6Av/QfxADeQH/x3UNAnj/9bRkCQJy8+CnWQYBb+fUnlAEAXPiyppQBQJw28mcTwUGf9rIpVIMB0+t2uipWQ0LTKja6KxfEAtAot3fsG0SDjOY4d25dxUQLJXk57+BGBUlj+bswokZFiGJ6O/IjxgXH4Xq8suSGBcdhuvzzZQYFxyE7PTPlBgXHYXr88yTGBcehurzy5IYFx+F6vHJkBgXIYfp78eLGBYjiunswoYYFSSR5ui9fxYTK5bj4bVzFA4ynuHZrWYQCUCj3c+dVgsIS67e0ppLBgRf0cmXSwQCX9nTmU4DAl/h2p1SAwJn7+GmXAUDcf3ytnAJBHkGAMh9DgV7CADU');
+      }
+      pomodoroAudioRef.current.play().catch(() => {});
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (timerState.mode !== 'idle') {
@@ -184,7 +216,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const stopSession = useCallback(async () => {
-    const finalTimes = getDisplayTimes(timerState);
+    const finalTimes = getDisplayTimes(timerState, pomodoroSettings);
     dispatch({ type: 'STOP_SESSION' });
 
     if (pendingSessionRef.current) {
@@ -200,13 +232,21 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     clearTimerState();
     await exitFullscreen();
     await refreshSubjects();
-  }, [timerState, refreshSubjects]);
+  }, [timerState, pomodoroSettings, refreshSubjects]);
 
   const switchSubject = useCallback((subjectId: string) => {
     if (pendingSessionRef.current) {
       pendingSessionRef.current.subjectId = subjectId;
     }
     dispatch({ type: 'SWITCH_SUBJECT', subjectId });
+  }, []);
+
+  const updatePomodoroSettings = useCallback((updates: Partial<PomodoroSettings>) => {
+    setPomodoroSettings(prev => {
+      const newSettings = { ...prev, ...updates };
+      savePomodoroSettings(newSettings);
+      return newSettings;
+    });
   }, []);
 
   const todayTotalFocus = subjects.reduce((acc, s) => acc + s.todayTime, 0);
@@ -233,6 +273,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     todayTotalFocus,
     activeSubject,
     formatTime,
+    pomodoroSettings,
+    updatePomodoroSettings,
   };
 
   if (isLoading) {

@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import SubjectItem from '../components/Dashboard/SubjectItem';
 import { useTimer } from '@/context/TimerContext';
-import { Plus, X, Settings2 } from 'lucide-react';
+import { Plus, X, Settings2, Timer, ChevronDown, ChevronUp } from 'lucide-react';
 import { SubjectWithStats } from '@/lib/aggregations';
 
 const Dashboard = () => {
-  const { subjects, todayTotalFocus, formatTime, addSubject } = useTimer();
+  const { subjects, todayTotalFocus, formatTime, addSubject, pomodoroSettings, updatePomodoroSettings } = useTimer();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPomodoroExpanded, setIsPomodoroExpanded] = useState(false);
   const [newSubName, setNewSubName] = useState("");
   const [selectedColor, setSelectedColor] = useState("bg-subject-math");
 
@@ -150,6 +151,86 @@ const Dashboard = () => {
                   />
                 ))}
               </div>
+            </div>
+
+            <div className="border-t border-neutral-border pt-6">
+              <button
+                onClick={() => setIsPomodoroExpanded(!isPomodoroExpanded)}
+                className="w-full flex items-center justify-between text-sm font-medium text-neutral-muted mb-3"
+              >
+                <div className="flex items-center gap-2">
+                  <Timer size={16} />
+                  <span>Pomodoro Mode</span>
+                </div>
+                {isPomodoroExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-neutral-text">Enable Pomodoro</span>
+                <button
+                  onClick={() => updatePomodoroSettings({ enabled: !pomodoroSettings.enabled })}
+                  className={cn(
+                    "w-12 h-6 rounded-full transition-colors relative",
+                    pomodoroSettings.enabled ? "bg-primary" : "bg-neutral-border"
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "absolute top-1 w-4 h-4 rounded-full bg-white transition-transform",
+                      pomodoroSettings.enabled ? "translate-x-7" : "translate-x-1"
+                    )}
+                  />
+                </button>
+              </div>
+
+              {isPomodoroExpanded && pomodoroSettings.enabled && (
+                <div className="space-y-4 animate-in slide-in-from-top-2 duration-200">
+                  <div>
+                    <label className="block text-xs text-neutral-muted mb-2">Focus Duration (minutes)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="120"
+                      value={Math.floor(pomodoroSettings.focusDuration / 60)}
+                      onChange={(e) => updatePomodoroSettings({ focusDuration: parseInt(e.target.value) * 60 })}
+                      className="w-full bg-neutral-bg border border-neutral-border rounded-lg p-2 text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-muted mb-2">Short Break (minutes)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="30"
+                      value={Math.floor(pomodoroSettings.shortBreakDuration / 60)}
+                      onChange={(e) => updatePomodoroSettings({ shortBreakDuration: parseInt(e.target.value) * 60 })}
+                      className="w-full bg-neutral-bg border border-neutral-border rounded-lg p-2 text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-muted mb-2">Long Break (minutes)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={Math.floor(pomodoroSettings.longBreakDuration / 60)}
+                      onChange={(e) => updatePomodoroSettings({ longBreakDuration: parseInt(e.target.value) * 60 })}
+                      className="w-full bg-neutral-bg border border-neutral-border rounded-lg p-2 text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-neutral-muted mb-2">Long Break After (pomodoros)</label>
+                    <input
+                      type="number"
+                      min="2"
+                      max="10"
+                      value={pomodoroSettings.longBreakInterval}
+                      onChange={(e) => updatePomodoroSettings({ longBreakInterval: parseInt(e.target.value) })}
+                      className="w-full bg-neutral-bg border border-neutral-border rounded-lg p-2 text-white text-sm"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

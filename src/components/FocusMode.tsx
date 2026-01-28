@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTimer } from '@/context/TimerContext';
-import { Pause, Coffee, Maximize } from 'lucide-react';
+import { Pause, Coffee, Maximize, Timer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { enterFullscreen } from '@/lib/timerMachine';
 
@@ -11,6 +11,7 @@ const FocusMode = () => {
     activeSubject,
     stopSession,
     formatTime,
+    pomodoroSettings,
   } = useTimer();
 
   useEffect(() => {
@@ -27,6 +28,14 @@ const FocusMode = () => {
 
   const isFocusing = timerState.mode === 'focusing';
   const isOnBreak = timerState.mode === 'break';
+  const isPomodoroActive = pomodoroSettings.enabled;
+  const pomodoroCount = timerState.pomodoroCount;
+
+  const formatPomodoroTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
   const handleResumeFullscreen = async () => {
     await enterFullscreen();
@@ -48,7 +57,15 @@ const FocusMode = () => {
           ) : (
             <div className="flex items-center gap-2 text-amber-400">
               <Coffee size={14} />
-              <span className="text-xs font-medium">On Break</span>
+              <span className="text-xs font-medium">
+                {timerState.pomodoroPhase === 'longBreak' ? 'Long Break' : 'Short Break'}
+              </span>
+            </div>
+          )}
+          {isPomodoroActive && (
+            <div className="flex items-center gap-1 text-neutral-500 ml-2">
+              <Timer size={12} />
+              <span className="text-xs">#{pomodoroCount + (isFocusing ? 1 : 0)}</span>
             </div>
           )}
         </div>
@@ -81,8 +98,17 @@ const FocusMode = () => {
             isFocusing ? 'text-white' : 'text-amber-400'
           )}
         >
-          {formatTime(displayTimes.currentSegment)}
+          {isPomodoroActive
+            ? formatPomodoroTime(displayTimes.pomodoroRemaining)
+            : formatTime(displayTimes.currentSegment)
+          }
         </div>
+
+        {isPomodoroActive && (
+          <div className="text-neutral-500 text-sm mb-4">
+            {isFocusing ? 'Focus time remaining' : 'Break time remaining'}
+          </div>
+        )}
 
         <div className="flex gap-8 text-center mb-8">
           <div className="flex flex-col gap-1 items-center">

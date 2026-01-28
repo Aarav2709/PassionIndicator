@@ -1,4 +1,4 @@
-import { TimerState, TimerEvent, generateId } from './types';
+import { TimerState, TimerEvent, generateId, PomodoroSettings, DEFAULT_POMODORO } from './types';
 
 export function createInitialState(): TimerState {
   return {
@@ -11,6 +11,8 @@ export function createInitialState(): TimerState {
     accumulatedFocus: 0,
     accumulatedBreak: 0,
     isFullscreen: false,
+    pomodoroCount: 0,
+    pomodoroPhase: null,
   };
 }
 
@@ -29,7 +31,9 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
         breakStartedAt: null,
         accumulatedFocus: 0,
         accumulatedBreak: 0,
-        isFullscreen: true, // Assume fullscreen request will succeed
+        isFullscreen: true,
+        pomodoroCount: 0,
+        pomodoroPhase: 'focus',
       };
     }
 
@@ -57,6 +61,41 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
       return {
         ...state,
         activeSubjectId: event.subjectId,
+      };
+    }
+
+    case 'POMODORO_FOCUS_COMPLETE': {
+      const newCount = state.pomodoroCount + 1;
+      const isLongBreak = newCount % (event.settings?.longBreakInterval || 4) === 0;
+      let finalFocus = state.accumulatedFocus;
+      if (state.focusStartedAt) {
+        finalFocus += Math.floor((now - state.focusStartedAt) / 1000);
+      }
+      return {
+        ...state,
+        mode: 'break',
+        focusStartedAt: null,
+        breakStartedAt: now,
+        accumulatedFocus: finalFocus,
+        isFullscreen: false,
+        pomodoroCount: newCount,
+        pomodoroPhase: isLongBreak ? 'longBreak' : 'shortBreak',
+      };
+    }
+
+    case 'POMODORO_BREAK_COMPLETE': {
+      let finalBreak = state.accumulatedBreak;
+      if (state.breakStartedAt) {
+        finalBreak += Math.floor((now - state.breakStartedAt) / 1000);
+      }
+      return {
+        ...state,
+        mode: 'focusing',
+        focusStartedAt: now,
+        breakStartedAt: null,
+        accumulatedBreak: finalBreak,
+        isFullscreen: true,
+        pomodoroPhase: 'focus',
       };
     }
 
@@ -124,10 +163,12 @@ export interface DisplayTimes {
   currentFocus: number;
   currentBreak: number;
   currentSegment: number;
+  pomodoroRemaining: number;
 }
 
-export function getDisplayTimes(state: TimerState): DisplayTimes {
+export function getDisplayTimes(state: TimerState, pomodoroSettings?: PomodoroSettings): DisplayTimes {
   const now = Date.now();
+  const settings = pomodoroSettings || DEFAULT_POMODORO;
 
   if (state.mode === 'idle') {
     return {
@@ -135,21 +176,28 @@ export function getDisplayTimes(state: TimerState): DisplayTimes {
       currentFocus: 0,
       currentBreak: 0,
       currentSegment: 0,
+      pomodoroRemaining: settings.focusDuration,
     };
   }
 
   let currentFocus = state.accumulatedFocus;
   let currentBreak = state.accumulatedBreak;
   let currentSegment = 0;
+  let pomodoroRemaining = 0;
 
   if (state.mode === 'focusing' && state.focusStartedAt) {
     const elapsed = Math.floor((now - state.focusStartedAt) / 1000);
     currentFocus += elapsed;
     currentSegment = elapsed;
+    pomodoroRemaining = Math.max(0, settings.focusDuration - elapsed);
   } else if (state.mode === 'break' && state.breakStartedAt) {
     const elapsed = Math.floor((now - state.breakStartedAt) / 1000);
     currentBreak += elapsed;
     currentSegment = elapsed;
+    const breakDuration = state.pomodoroPhase === 'longBreak'
+      ? settings.longBreakDuration
+      : settings.shortBreakDuration;
+    pomodoroRemaining = Math.max(0, breakDuration - elapsed);
   }
 
   const sessionDuration = state.sessionStartedAt
@@ -161,6 +209,7 @@ export function getDisplayTimes(state: TimerState): DisplayTimes {
     currentFocus,
     currentBreak,
     currentSegment,
+    pomodoroRemaining,
   };
 }
 

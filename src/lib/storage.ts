@@ -4,6 +4,8 @@ import {
   Session,
   DailyStats,
   TimerState,
+  PomodoroSettings,
+  DEFAULT_POMODORO,
   DB_NAME,
   DB_VERSION,
   STORES,
@@ -318,6 +320,15 @@ export function getTimerState(): TimerState | null {
 
 export function clearTimerState(): void {
   localStorage.removeItem(STORAGE_KEYS.ACTIVE_STATE);
+}
+
+export function getPomodoroSettings(): PomodoroSettings {
+  const data = localStorage.getItem(STORAGE_KEYS.POMODORO_SETTINGS);
+  return data ? { ...DEFAULT_POMODORO, ...JSON.parse(data) } : DEFAULT_POMODORO;
+}
+
+export function savePomodoroSettings(settings: PomodoroSettings): void {
+  localStorage.setItem(STORAGE_KEYS.POMODORO_SETTINGS, JSON.stringify(settings));
 }
 
 const DEFAULT_SUBJECTS: Omit<Subject, 'id' | 'createdAt'>[] = [

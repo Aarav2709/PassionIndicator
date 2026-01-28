@@ -35,6 +35,22 @@ export interface DailyStats {
 
 export type TimerMode = 'idle' | 'focusing' | 'break';
 
+export interface PomodoroSettings {
+  enabled: boolean;
+  focusDuration: number;
+  shortBreakDuration: number;
+  longBreakDuration: number;
+  longBreakInterval: number;
+}
+
+export const DEFAULT_POMODORO: PomodoroSettings = {
+  enabled: false,
+  focusDuration: 25 * 60,
+  shortBreakDuration: 5 * 60,
+  longBreakDuration: 15 * 60,
+  longBreakInterval: 4,
+};
+
 export interface TimerState {
   mode: TimerMode;
   activeSubjectId: string | null;
@@ -45,6 +61,8 @@ export interface TimerState {
   accumulatedFocus: number;
   accumulatedBreak: number;
   isFullscreen: boolean;
+  pomodoroCount: number;
+  pomodoroPhase: 'focus' | 'shortBreak' | 'longBreak' | null;
 }
 
 export type TimerEvent =
@@ -53,6 +71,8 @@ export type TimerEvent =
   | { type: 'SWITCH_SUBJECT'; subjectId: string }
   | { type: 'FULLSCREEN_ENTER' }
   | { type: 'FULLSCREEN_EXIT' }
+  | { type: 'POMODORO_FOCUS_COMPLETE'; settings?: PomodoroSettings }
+  | { type: 'POMODORO_BREAK_COMPLETE' }
   | { type: 'TICK' };
 
 export const STORAGE_KEYS = {
@@ -61,6 +81,7 @@ export const STORAGE_KEYS = {
   SESSIONS: 'pi_sessions',
   DAILY_STATS: 'pi_daily_stats',
   ACTIVE_STATE: 'pi_active_state',
+  POMODORO_SETTINGS: 'pi_pomodoro_settings',
 } as const;
 
 export const DB_NAME = 'PassionIndicatorDB';

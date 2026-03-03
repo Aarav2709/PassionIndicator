@@ -6,6 +6,8 @@ import {
   TimerState,
   PomodoroSettings,
   DEFAULT_POMODORO,
+  AppSettings,
+  DEFAULT_APP_SETTINGS,
   DB_NAME,
   DB_VERSION,
   STORES,
@@ -329,6 +331,15 @@ export function getPomodoroSettings(): PomodoroSettings {
 
 export function savePomodoroSettings(settings: PomodoroSettings): void {
   localStorage.setItem(STORAGE_KEYS.POMODORO_SETTINGS, JSON.stringify(settings));
+}
+
+export function getAppSettings(): AppSettings {
+  const data = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
+  return data ? { ...DEFAULT_APP_SETTINGS, ...JSON.parse(data) } : DEFAULT_APP_SETTINGS;
+}
+
+export function saveAppSettings(settings: AppSettings): void {
+  localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(settings));
 }
 
 const DEFAULT_SUBJECTS: Omit<Subject, 'id' | 'createdAt'>[] = [

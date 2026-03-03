@@ -5,19 +5,67 @@
 @layer base {
   :root {
     color-scheme: dark;
-    /* Default Passion Orange (slightly less vibrant: #F57C00 equivalent) */
-    --primary: 245 124 0;
+    --primary: 255 107 71;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
   }
 
   body {
-    @apply bg-neutral-bg text-neutral-text antialiased;
+    @apply bg-neutral-bg text-white antialiased font-sans;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    @apply bg-primary/30 text-white;
   }
 }
 
-/* Custom scrollbar for webkit */
+@layer components {
+  .ypt-card {
+    @apply bg-neutral-surface border border-neutral-border rounded-2xl;
+  }
+
+  .ypt-btn {
+    @apply px-4 py-2 rounded-xl font-medium transition-all duration-200 active:scale-[0.97];
+  }
+
+  .ypt-btn-primary {
+    @apply ypt-btn bg-primary text-white hover:brightness-110;
+  }
+
+  .ypt-btn-ghost {
+    @apply ypt-btn bg-transparent text-neutral-muted hover:text-white hover:bg-white/5;
+  }
+
+  .ypt-input {
+    @apply w-full bg-neutral-bg border border-neutral-border rounded-xl px-4 py-3 text-white
+           placeholder:text-neutral-muted/50 focus:outline-none focus:border-primary/50
+           focus:ring-1 focus:ring-primary/20 transition-all;
+  }
+
+  .ypt-nav-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+           text-neutral-muted hover:text-white hover:bg-white/5 transition-all duration-200 cursor-pointer;
+  }
+
+  .ypt-nav-item-active {
+    @apply text-white bg-primary/10 border border-primary/20;
+  }
+
+  .ypt-timer-display {
+    @apply font-mono tabular-nums tracking-tight select-none;
+  }
+}
+
+/* Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -25,5 +73,14 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-neutral-border rounded-full hover:bg-neutral-muted;
+  @apply bg-neutral-border rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-neutral-muted/50;
+}
+
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-neutral-bg;
 }

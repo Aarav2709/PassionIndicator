@@ -75,6 +75,28 @@ export type TimerEvent =
   | { type: 'POMODORO_BREAK_COMPLETE' }
   | { type: 'TICK' };
 
+export interface AppSettings {
+  dDayDate: string | null;     // ISO date string e.g. '2026-11-15'
+  dDayLabel: string;            // e.g. '수능' or 'SAT'
+  dailyGoalSeconds: number;     // daily study goal in seconds
+  theme: 'coral' | 'blue' | 'purple' | 'green' | 'pink';
+}
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  dDayDate: null,
+  dDayLabel: 'D-Day',
+  dailyGoalSeconds: 8 * 3600,  // 8 hours default
+  theme: 'coral',
+};
+
+export const THEME_COLORS: Record<string, string> = {
+  coral: '255 107 71',
+  blue: '59 130 246',
+  purple: '147 51 234',
+  green: '34 197 94',
+  pink: '236 72 153',
+};
+
 export const STORAGE_KEYS = {
   SUBJECTS: 'pi_subjects',
   TODOS: 'pi_todos',
@@ -82,6 +104,7 @@ export const STORAGE_KEYS = {
   DAILY_STATS: 'pi_daily_stats',
   ACTIVE_STATE: 'pi_active_state',
   POMODORO_SETTINGS: 'pi_pomodoro_settings',
+  APP_SETTINGS: 'pi_app_settings',
 } as const;
 
 export const DB_NAME = 'PassionIndicatorDB';

@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from 'react';
 
-import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, formatTime, getDateKey } from '@/lib/types';
+import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, AppSettings, DEFAULT_APP_SETTINGS, THEME_COLORS, formatTime, getDateKey } from '@/lib/types';
 import {
   createSubject as dbCreateSubject,
   saveSubject,
@@ -25,6 +25,8 @@ import {
   recomputeDailyStats,
   getPomodoroSettings,
   savePomodoroSettings,
+  getAppSettings,
+  saveAppSettings,
 } from '@/lib/storage';
 import {
   createInitialState,
@@ -58,6 +60,9 @@ interface TimerContextType {
   formatTime: (seconds: number) => string;
   pomodoroSettings: PomodoroSettings;
   updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void;
+  appSettings: AppSettings;
+  updateAppSettings: (settings: Partial<AppSettings>) => void;
+  dDayCount: number | null;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -78,6 +83,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingSessionRef = useRef<{ id: string; subjectId: string } | null>(null);
   const pomodoroAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
 
   useEffect(() => {
     async function init() {
@@ -86,6 +92,12 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       await refreshTodos();
       const savedPomodoro = getPomodoroSettings();
       setPomodoroSettings(savedPomodoro);
+      const savedAppSettings = getAppSettings();
+      setAppSettings(savedAppSettings);
+      // Apply saved theme
+      if (savedAppSettings.theme && THEME_COLORS[savedAppSettings.theme]) {
+        document.documentElement.style.setProperty('--primary', THEME_COLORS[savedAppSettings.theme]);
+      }
       const savedState = getTimerState();
       if (savedState && savedState.mode !== 'idle') {
         clearTimerState();
@@ -249,6 +261,22 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     });
   }, []);
 
+  const updateAppSettings = useCallback((updates: Partial<AppSettings>) => {
+    setAppSettings(prev => {
+      const newSettings = { ...prev, ...updates };
+      saveAppSettings(newSettings);
+      if (updates.theme && THEME_COLORS[updates.theme]) {
+        document.documentElement.style.setProperty('--primary', THEME_COLORS[updates.theme]);
+      }
+      return newSettings;
+    });
+  }, []);
+
+  // Compute D-Day
+  const dDayCount = appSettings.dDayDate
+    ? Math.ceil((new Date(appSettings.dDayDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+
   const todayTotalFocus = subjects.reduce((acc, s) => acc + s.todayTime, 0);
 
   const activeSubject = timerState.activeSubjectId
@@ -275,6 +303,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     formatTime,
     pomodoroSettings,
     updatePomodoroSettings,
+    appSettings,
+    updateAppSettings,
+    dDayCount,
   };
 
   if (isLoading) {

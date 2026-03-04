@@ -29,7 +29,6 @@ const FocusMode = () => {
   const isFocusing = timerState.mode === 'focusing';
   const isOnBreak = timerState.mode === 'break';
   const isPomodoroActive = pomodoroSettings.enabled;
-  const pomodoroCount = timerState.pomodoroCount;
 
   const formatPomodoroTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);

@@ -68,6 +68,8 @@ export interface TimerState {
 export type TimerEvent =
   | { type: 'START_SESSION'; subjectId: string }
   | { type: 'STOP_SESSION' }
+  | { type: 'PAUSE_SESSION' }
+  | { type: 'RESUME_SESSION' }
   | { type: 'SWITCH_SUBJECT'; subjectId: string }
   | { type: 'FULLSCREEN_ENTER' }
   | { type: 'FULLSCREEN_EXIT' }
@@ -77,7 +79,7 @@ export type TimerEvent =
 
 export interface AppSettings {
   dDayDate: string | null;     // ISO date string e.g. '2026-11-15'
-  dDayLabel: string;            // e.g. '수능' or 'SAT'
+  dDayLabel: string;            // e.g. 'Exam Day' or 'SAT'
   dailyGoalSeconds: number;     // daily study goal in seconds
   theme: 'coral' | 'blue' | 'purple' | 'green' | 'pink';
 }

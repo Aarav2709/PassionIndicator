@@ -8,7 +8,7 @@ import React, {
   useRef,
 } from 'react';
 
-import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, AppSettings, DEFAULT_APP_SETTINGS, THEME_COLORS, formatTime, getDateKey } from '@/lib/types';
+import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, AppSettings, DEFAULT_APP_SETTINGS, formatTime, getDateKey } from '@/lib/types';
 import {
   createSubject as dbCreateSubject,
   saveSubject,
@@ -39,6 +39,7 @@ import {
   DisplayTimes,
 } from '@/lib/timerMachine';
 import { getSubjectsWithStats, SubjectWithStats } from '@/lib/aggregations';
+import { getTodayStats } from '@/lib/aggregations';
 
 interface TimerContextType {
   subjects: SubjectWithStats[];
@@ -54,6 +55,8 @@ interface TimerContextType {
   isFullscreen: boolean;
   startSession: (subjectId: string) => Promise<void>;
   stopSession: () => Promise<void>;
+  pauseSession: () => Promise<void>;
+  resumeSession: () => Promise<void>;
   switchSubject: (subjectId: string) => void;
   todayTotalFocus: number;
   activeSubject: SubjectWithStats | null;
@@ -63,6 +66,7 @@ interface TimerContextType {
   appSettings: AppSettings;
   updateAppSettings: (settings: Partial<AppSettings>) => void;
   dDayCount: number | null;
+  todayTotalBreak: number;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
@@ -70,7 +74,6 @@ const TimerContext = createContext<TimerContextType | undefined>(undefined);
 export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [subjects, setSubjects] = useState<SubjectWithStats[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [timerState, dispatch] = useReducer(timerReducer, createInitialState());
   const [pomodoroSettings, setPomodoroSettings] = useState<PomodoroSettings>(DEFAULT_POMODORO);
   const [displayTimes, setDisplayTimes] = useState<DisplayTimes>({
@@ -83,7 +86,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingSessionRef = useRef<{ id: string; subjectId: string } | null>(null);
   const pomodoroAudioRef = useRef<HTMLAudioElement | null>(null);
+  const isStoppingSessionRef = useRef(false);
   const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
+  const [todayTotalBreak, setTodayTotalBreak] = useState(0);
 
   useEffect(() => {
     async function init() {
@@ -94,15 +99,12 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setPomodoroSettings(savedPomodoro);
       const savedAppSettings = getAppSettings();
       setAppSettings(savedAppSettings);
-      // Apply saved theme
-      if (savedAppSettings.theme && THEME_COLORS[savedAppSettings.theme]) {
-        document.documentElement.style.setProperty('--primary', THEME_COLORS[savedAppSettings.theme]);
-      }
       const savedState = getTimerState();
       if (savedState && savedState.mode !== 'idle') {
         clearTimerState();
       }
-      setIsLoading(false);
+      const todayStats = await getTodayStats();
+      setTodayTotalBreak(todayStats.totalBreakTime);
     }
     init();
   }, []);
@@ -151,8 +153,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!pomodoroAudioRef.current) {
         pomodoroAudioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQwLTq3a6KpZBwd/2smmUAwFcNvJnE8FAnPizplPBAFv59SfUAQBcfLgqFkGAnj/9bVlCQJ5AP/HdQ0DeAH/0H8PA3oC/9aGEAR8A//aiRIEfgP/3YsTBH8E/9+OFASAAv/gjxQEgAL/4I8UBIAC/9+OFAR/BP/djBMEfgP/2okSBHwD/9aGEAN6Av/QfxADeQH/x3UNAnj/9bRkCQJy8+CnWQYBb+fUnlAEAXPiyppQBQJw28mcTwUGf9rIpVIMB0+t2uipWQ0LTKja6KxfEAtAot3fsG0SDjOY4d25dxUQLJXk57+BGBUlj+bswokZFiGJ6O/IjxgXH4Xq8suSGBcdhuvzzZQYFxyE7PTPlBgXHYXr88yTGBcehurzy5IYFx+F6vHJkBgXIYfp78eLGBYjiunswoYYFSSR5ui9fxYTK5bj4bVzFA4ynuHZrWYQCUCj3c+dVgsIS67e0ppLBgRf0cmXSwQCX9nTmU4DAl/h2p1SAwJn7+GmXAUDcf3ytnAJBHkGAMh9DgV7CADU');
       }
-      pomodoroAudioRef.current.play().catch(() => {});
-    } catch {}
+      pomodoroAudioRef.current.play().catch(() => { });
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -163,6 +165,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     const handleFullscreenChange = () => {
+      if (isStoppingSessionRef.current) {
+        return;
+      }
       const isFs = isCurrentlyFullscreen();
       if (isFs) {
         dispatch({ type: 'FULLSCREEN_ENTER' });
@@ -182,6 +187,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const refreshSubjects = useCallback(async () => {
     const data = await getSubjectsWithStats();
     setSubjects(data);
+    const todayStats = await getTodayStats();
+    setTodayTotalBreak(todayStats.totalBreakTime);
   }, []);
 
   const refreshTodos = useCallback(async () => {
@@ -228,23 +235,40 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const stopSession = useCallback(async () => {
-    const finalTimes = getDisplayTimes(timerState, pomodoroSettings);
-    dispatch({ type: 'STOP_SESSION' });
+    isStoppingSessionRef.current = true;
+    try {
+      const finalTimes = getDisplayTimes(timerState, pomodoroSettings);
+      dispatch({ type: 'STOP_SESSION' });
 
-    if (pendingSessionRef.current) {
-      await endSession(
-        pendingSessionRef.current.id,
-        finalTimes.currentFocus,
-        finalTimes.currentBreak
-      );
-      await recomputeDailyStats(getDateKey());
-      pendingSessionRef.current = null;
+      if (pendingSessionRef.current) {
+        await endSession(
+          pendingSessionRef.current.id,
+          finalTimes.currentFocus,
+          finalTimes.currentBreak
+        );
+        await recomputeDailyStats(getDateKey());
+        pendingSessionRef.current = null;
+      }
+
+      clearTimerState();
+      await exitFullscreen();
+      document.documentElement.style.overflowY = '';
+      document.body.style.overflowY = '';
+      await refreshSubjects();
+    } finally {
+      isStoppingSessionRef.current = false;
     }
-
-    clearTimerState();
-    await exitFullscreen();
-    await refreshSubjects();
   }, [timerState, pomodoroSettings, refreshSubjects]);
+
+  const pauseSession = useCallback(async () => {
+    dispatch({ type: 'PAUSE_SESSION' });
+    await exitFullscreen();
+  }, []);
+
+  const resumeSession = useCallback(async () => {
+    dispatch({ type: 'RESUME_SESSION' });
+    await enterFullscreen();
+  }, []);
 
   const switchSubject = useCallback((subjectId: string) => {
     if (pendingSessionRef.current) {
@@ -265,9 +289,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setAppSettings(prev => {
       const newSettings = { ...prev, ...updates };
       saveAppSettings(newSettings);
-      if (updates.theme && THEME_COLORS[updates.theme]) {
-        document.documentElement.style.setProperty('--primary', THEME_COLORS[updates.theme]);
-      }
       return newSettings;
     });
   }, []);
@@ -297,6 +318,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     isFullscreen: timerState.isFullscreen,
     startSession,
     stopSession,
+    pauseSession,
+    resumeSession,
     switchSubject,
     todayTotalFocus,
     activeSubject,
@@ -306,15 +329,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     appSettings,
     updateAppSettings,
     dDayCount,
+    todayTotalBreak,
   };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-neutral-bg flex items-center justify-center">
-        <div className="text-neutral-muted">Loading...</div>
-      </div>
-    );
-  }
 
   return (
     <TimerContext.Provider value={contextValue}>

@@ -1,21 +1,23 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import Layout from './components/Layout/Layout';
+import { TimerProvider } from '@/context/TimerContext';
 import Dashboard from './pages/Dashboard';
-import Insights from './pages/Insights';
-
-import Settings from './pages/Settings';
+import StudyOverlay from './components/StudyOverlay';
 
 function App() {
   return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="insights" element={<Insights />} />
-          <Route path="settings" element={<Settings />} />
+    <Router
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
+      <TimerProvider>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
+        </Routes>
+        <StudyOverlay />
+      </TimerProvider>
     </Router>
   );
 }

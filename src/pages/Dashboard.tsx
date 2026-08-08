@@ -1,198 +1,112 @@
 import { useState } from 'react';
-import { cn } from '@/lib/utils';
 import SubjectItem from '../components/Dashboard/SubjectItem';
 import { useTimer } from '@/context/TimerContext';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { SubjectWithStats } from '@/lib/aggregations';
 
-const COLORS = [
-  { bg: 'bg-subject-math', label: 'Orange' },
-  { bg: 'bg-subject-science', label: 'Yellow' },
-  { bg: 'bg-subject-history', label: 'Peach' },
-  { bg: 'bg-subject-english', label: 'Periwinkle' },
-  { bg: 'bg-emerald-500', label: 'Emerald' },
-  { bg: 'bg-rose-500', label: 'Rose' },
-  { bg: 'bg-blue-500', label: 'Blue' },
-  { bg: 'bg-pink-500', label: 'Pink' },
-];
+const SUBJECT_COLORS = [
+  { value: 'bg-subject-math', label: 'Orange' },
+  { value: 'bg-subject-science', label: 'Gold' },
+  { value: 'bg-subject-history', label: 'Sand' },
+  { value: 'bg-subject-english', label: 'Blue' },
+  { value: 'bg-emerald-500', label: 'Green' },
+  { value: 'bg-rose-500', label: 'Rose' },
+  { value: 'bg-violet-500', label: 'Violet' },
+  { value: 'bg-cyan-500', label: 'Cyan' },
+] as const;
 
 const Dashboard = () => {
   const {
     subjects,
     todayTotalFocus,
+    pomodoroSettings,
+    updatePomodoroSettings,
     formatTime,
     addSubject,
-    dDayCount,
-    appSettings,
   } = useTimer();
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newSubName, setNewSubName] = useState('');
-  const [selectedColor, setSelectedColor] = useState('bg-subject-math');
+  const [newSubject, setNewSubject] = useState('');
+
+  const pickRandomColor = () => SUBJECT_COLORS[Math.floor(Math.random() * SUBJECT_COLORS.length)].value;
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (newSubName.trim()) {
-      addSubject(newSubName.trim(), `${selectedColor} text-white`);
-      setNewSubName('');
-      setIsModalOpen(false);
+    if (newSubject.trim()) {
+      addSubject(newSubject.trim(), pickRandomColor());
+      setNewSubject('');
     }
   };
 
-  // Goal progress
-  const goalProgress = Math.min(1, todayTotalFocus / appSettings.dailyGoalSeconds);
-  const goalHours = Math.floor(appSettings.dailyGoalSeconds / 3600);
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
-    <div className="animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-sm font-medium text-neutral-muted">
-            {new Date().toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </h2>
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
+      <section className="rounded-[2rem] border border-[#1a1a1a] bg-[#080808] px-6 py-8 text-center shadow-[0_20px_80px_rgba(0,0,0,0.35)] sm:px-10 sm:py-10">
+        <h2 className="text-sm text-neutral-500">{todayLabel}</h2>
+        <div className="mt-8 text-[clamp(4rem,12vw,7.5rem)] font-medium leading-none text-white">
+          {formatTime(todayTotalFocus)}
         </div>
-        {dDayCount !== null && (
-          <div className={cn(
-            'px-4 py-1.5 rounded-full text-sm font-bold',
-            dDayCount > 0
-              ? 'bg-primary/15 text-primary border border-primary/20'
-              : dDayCount === 0
-              ? 'bg-red-500/15 text-red-400 border border-red-500/20'
-              : 'bg-neutral-muted/15 text-neutral-muted border border-neutral-border'
-          )}>
-            {dDayCount > 0 ? `D-${dDayCount}` : dDayCount === 0 ? 'D-Day!' : `D+${Math.abs(dDayCount)}`}
-          </div>
-        )}
-      </div>
 
-      {/* Hero Timer */}
-      <div className="ypt-card p-8 mb-8 text-center relative overflow-hidden">
-        {/* Subtle gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent pointer-events-none" />
-
-        <div className="relative z-10">
-          <div className="text-[11px] uppercase tracking-[0.2em] text-neutral-muted font-semibold mb-6">
-            Total Study Time
-          </div>
-
-          <h1 className="text-timer-hero font-mono tabular-nums text-white select-none mb-6 drop-shadow-sm">
-            {formatTime(todayTotalFocus)}
-          </h1>
-
-          {/* Goal Progress */}
-          <div className="max-w-xs mx-auto">
-            <div className="flex items-center justify-between text-xs text-neutral-muted mb-2">
-              <span>Daily Goal</span>
-              <span className="font-mono tabular-nums">
-                {Math.floor(goalProgress * 100)}% · {goalHours}h target
-              </span>
-            </div>
-            <div className="w-full h-1.5 bg-neutral-border rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-1000 ease-out"
-                style={{ width: `${goalProgress * 100}%` }}
-              />
-            </div>
-          </div>
+        <div className="mt-8 flex items-center justify-center">
+          <span className="mr-3 text-xs uppercase tracking-[0.22em] text-neutral-500">
+            Pomodoro
+          </span>
+          <button
+            type="button"
+            onClick={() => updatePomodoroSettings({ enabled: !pomodoroSettings.enabled })}
+            aria-pressed={pomodoroSettings.enabled}
+            aria-label="Pomodoro mode"
+            className={
+              pomodoroSettings.enabled
+                ? 'relative h-8 w-14 rounded-full border border-emerald-400/20 bg-emerald-400/15 transition-all duration-300 ease-out'
+                : 'relative h-8 w-14 rounded-full border border-[#1a1a1a] bg-white/5 transition-all duration-300 ease-out'
+            }
+          >
+            <span
+              className={
+                pomodoroSettings.enabled
+                  ? 'absolute left-7 top-1 h-6 w-6 rounded-full bg-emerald-300 shadow-[0_0_18px_rgba(52,211,153,0.28)] transition-all duration-300 ease-out'
+                  : 'absolute left-1 top-1 h-6 w-6 rounded-full bg-neutral-400 transition-all duration-300 ease-out'
+              }
+            />
+          </button>
         </div>
-      </div>
+      </section>
 
-      {/* Subject List Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-neutral-muted uppercase tracking-wider">
-          Subjects
-        </h3>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
-        >
-          <Plus size={14} />
-          Add Subject
-        </button>
-      </div>
+      <section className="rounded-[2rem] border border-[#1a1a1a] bg-[#080808] px-4 py-2 sm:px-6">
+        <div className="space-y-0">
+          {subjects.map((subject: SubjectWithStats) => (
+            <SubjectItem key={subject.id} subject={subject} />
+          ))}
 
-      {/* Subject List */}
-      <div className="space-y-2">
-        {subjects.map((subject: SubjectWithStats) => (
-          <SubjectItem key={subject.id} subject={subject} />
-        ))}
+          {subjects.length === 0 && (
+            <div className="rounded-2xl border border-[#1a1a1a] p-6 text-sm text-neutral-500">
+              No subjects yet.
+            </div>
+          )}
+        </div>
 
-        {subjects.length === 0 && (
-          <div className="ypt-card p-12 text-center">
-            <div className="text-neutral-muted text-sm">No subjects yet</div>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="mt-3 text-primary text-sm font-medium hover:underline"
-            >
-              Create your first subject
+        <form onSubmit={handleCreate} className="mt-6 flex flex-col gap-4 pb-4">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <input
+              value={newSubject}
+              onChange={(e) => setNewSubject(e.target.value)}
+              className="ypt-input"
+              placeholder="Add subject"
+              aria-label="Add subject"
+            />
+            <button type="submit" className="ypt-btn-primary inline-flex items-center justify-center gap-2 px-5">
+              <Plus size={14} />
+              Add
             </button>
           </div>
-        )}
-      </div>
-
-      {/* Add Subject Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-neutral-surface border border-neutral-border p-6 rounded-2xl w-full max-w-sm animate-scale-in shadow-2xl">
-            <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold">Add Subject</h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="p-1 rounded-lg hover:bg-white/5 text-neutral-muted hover:text-white transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={handleCreate} className="space-y-6">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-muted uppercase tracking-wider mb-2">
-                  Subject Name
-                </label>
-                <input
-                  value={newSubName}
-                  onChange={(e) => setNewSubName(e.target.value)}
-                  className="ypt-input"
-                  placeholder="e.g. Mathematics"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-neutral-muted uppercase tracking-wider mb-3">
-                  Color
-                </label>
-                <div className="flex gap-3 flex-wrap">
-                  {COLORS.map((c) => (
-                    <button
-                      type="button"
-                      key={c.bg}
-                      onClick={() => setSelectedColor(c.bg)}
-                      className={cn(
-                        'w-8 h-8 rounded-full transition-all hover:scale-110',
-                        c.bg,
-                        selectedColor === c.bg &&
-                          'ring-2 ring-white ring-offset-2 ring-offset-neutral-surface scale-110'
-                      )}
-                      title={c.label}
-                    />
-                  ))}
-                </div>
-              </div>
-              <button
-                type="submit"
-                className="w-full ypt-btn-primary py-3 text-sm font-bold"
-              >
-                Create Subject
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+        </form>
+      </section>
     </div>
   );
 };

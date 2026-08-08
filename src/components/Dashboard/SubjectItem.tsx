@@ -1,46 +1,38 @@
 import { useState, useRef, useEffect } from 'react';
-import { Play, Check, Plus, MoreVertical, Trash2, Edit2, X } from 'lucide-react';
+import { Play, MoreVertical, Trash2, Edit2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTimer } from '@/context/TimerContext';
 import { SubjectWithStats } from '@/lib/aggregations';
-import { Todo } from '@/lib/types';
 
-const COLORS = [
-  { bg: 'bg-subject-math', label: 'Orange' },
-  { bg: 'bg-subject-science', label: 'Yellow' },
-  { bg: 'bg-subject-history', label: 'Peach' },
-  { bg: 'bg-subject-english', label: 'Periwinkle' },
-  { bg: 'bg-emerald-500', label: 'Emerald' },
-  { bg: 'bg-rose-500', label: 'Rose' },
-  { bg: 'bg-blue-500', label: 'Blue' },
-  { bg: 'bg-pink-500', label: 'Pink' },
-];
+const SUBJECT_COLORS = [
+  { value: 'bg-subject-math', label: 'Orange' },
+  { value: 'bg-subject-science', label: 'Gold' },
+  { value: 'bg-subject-history', label: 'Sand' },
+  { value: 'bg-subject-english', label: 'Blue' },
+  { value: 'bg-emerald-500', label: 'Green' },
+  { value: 'bg-rose-500', label: 'Rose' },
+  { value: 'bg-violet-500', label: 'Violet' },
+  { value: 'bg-cyan-500', label: 'Cyan' },
+] as const;
 
 interface SubjectItemProps {
   subject: SubjectWithStats;
 }
 
 const SubjectItem = ({ subject }: SubjectItemProps) => {
-  const { id, name, color, todayTime } = subject;
+  const { id, name, todayTime } = subject;
   const {
     startSession,
-    addTodo,
-    toggleTodo,
     deleteSubject,
     updateSubject,
     formatTime,
-    todos,
   } = useTimer();
 
-  const [todoInput, setTodoInput] = useState('');
-  const [isAddingTodo, setIsAddingTodo] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(name);
-  const [editColor, setEditColor] = useState(color);
+  const [editColor, setEditColor] = useState(subject.color);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  const subjectTodos = todos.filter((t: Todo) => t.subjectId === id);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -51,15 +43,6 @@ const SubjectItem = ({ subject }: SubjectItemProps) => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const handleAddTodo = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (todoInput.trim()) {
-      await addTodo(id, todoInput);
-      setTodoInput('');
-      setIsAddingTodo(false);
-    }
-  };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,43 +64,26 @@ const SubjectItem = ({ subject }: SubjectItemProps) => {
 
   return (
     <>
-      <div className="group relative bg-neutral-surface hover:bg-neutral-surface/80 border border-neutral-border rounded-xl px-4 py-3 transition-all duration-200 hover:border-neutral-muted/50">
-        <div className="flex items-center justify-between">
-          {/* Left: Play + Name */}
-          <div className="flex items-center gap-3 min-w-0">
+      <div className="group relative border-b border-[#1a1a1a] py-4 last:border-b-0">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               onClick={handleStartSession}
               className={cn(
-                'w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0',
-                color,
-                'text-white hover:brightness-110 hover:scale-105 active:scale-95'
+                'flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 text-white transition-colors hover:brightness-110 active:scale-[0.98]',
+                subject.color
               )}
             >
               <Play size={14} fill="currentColor" className="ml-0.5" />
             </button>
 
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm text-white truncate">{name}</h3>
-                <button
-                  onClick={() => setIsAddingTodo(!isAddingTodo)}
-                  className="p-0.5 rounded text-neutral-muted/50 hover:text-primary opacity-0 group-hover:opacity-100 transition-all"
-                  title="Add Todo"
-                >
-                  <Plus size={12} />
-                </button>
-              </div>
-              {subjectTodos.length > 0 && (
-                <div className="text-[11px] text-neutral-muted mt-0.5">
-                  {subjectTodos.filter(t => t.completed).length}/{subjectTodos.length} tasks
-                </div>
-              )}
+              <h3 className="truncate text-sm font-medium text-white">{name}</h3>
             </div>
           </div>
 
-          {/* Right: Time + Menu */}
-          <div className="flex items-center gap-2 relative shrink-0">
-            <div className="text-base font-mono font-semibold tabular-nums text-white/90 tracking-tight">
+          <div className="relative flex shrink-0 items-center gap-2">
+            <div className="rounded-full border border-[#1a1a1a] bg-black px-3 py-1 text-sm text-neutral-300">
               {formatTime(todayTime)}
             </div>
             <button
@@ -125,7 +91,7 @@ const SubjectItem = ({ subject }: SubjectItemProps) => {
                 e.stopPropagation();
                 setShowMenu(!showMenu);
               }}
-              className="text-neutral-muted/40 hover:text-neutral-muted p-1 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+              className="rounded-full p-1 text-neutral-600 opacity-0 transition-colors hover:text-white group-hover:opacity-100"
             >
               <MoreVertical size={16} />
             </button>
@@ -133,23 +99,23 @@ const SubjectItem = ({ subject }: SubjectItemProps) => {
             {showMenu && (
               <div
                 ref={menuRef}
-                className="absolute top-8 right-0 z-20 bg-neutral-surface border border-neutral-border rounded-xl shadow-xl p-1 min-w-[120px] animate-scale-in flex flex-col gap-0.5"
+                className="absolute right-0 top-10 z-20 min-w-[120px] rounded-2xl border border-[#1a1a1a] bg-[#0b0b0b] p-1"
               >
                 <button
                   onClick={() => {
                     setEditName(name);
-                    setEditColor(color);
+                    setEditColor(subject.color);
                     setIsEditing(true);
                     setShowMenu(false);
                   }}
-                  className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-white/5 rounded-lg flex items-center gap-2 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-neutral-300 transition-colors hover:bg-white/5 hover:text-white"
                 >
                   <Edit2 size={13} />
                   Edit
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 rounded-lg flex items-center gap-2 transition-colors"
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10"
                 >
                   <Trash2 size={13} />
                   Delete
@@ -158,107 +124,60 @@ const SubjectItem = ({ subject }: SubjectItemProps) => {
             )}
           </div>
         </div>
-
-        {/* Add Todo Input */}
-        {isAddingTodo && (
-          <form onSubmit={handleAddTodo} className="mt-3 ml-12 flex gap-2">
-            <input
-              autoFocus
-              type="text"
-              value={todoInput}
-              onChange={(e) => setTodoInput(e.target.value)}
-              placeholder="What to study?"
-              className="ypt-input text-sm py-2"
-              onBlur={() => {
-                if (!todoInput.trim()) setIsAddingTodo(false);
-              }}
-            />
-          </form>
-        )}
-
-        {/* Todo List */}
-        {subjectTodos.length > 0 && (
-          <div className="mt-2.5 ml-12 space-y-1.5">
-            {subjectTodos.map((todo) => (
-              <div
-                key={todo.id}
-                onClick={() => toggleTodo(id, todo.id)}
-                className="flex items-center gap-2.5 text-sm text-neutral-muted hover:text-white transition-colors cursor-pointer group/todo"
-              >
-                <div
-                  className={cn(
-                    'w-3.5 h-3.5 rounded border flex items-center justify-center transition-all shrink-0',
-                    todo.completed
-                      ? 'bg-primary border-primary text-white'
-                      : 'border-neutral-muted/40 group-hover/todo:border-primary/60'
-                  )}
-                >
-                  {todo.completed && <Check size={10} strokeWidth={3} />}
-                </div>
-                <span className={cn('text-xs', todo.completed && 'line-through opacity-40')}>
-                  {todo.title}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
-      {/* Edit Modal */}
       {isEditing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-neutral-surface border border-neutral-border p-6 rounded-2xl w-full max-w-sm animate-scale-in shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-[#1a1a1a] bg-[#0b0b0b] p-6">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-lg font-bold">Edit Subject</h3>
+              <h3 className="text-lg font-medium text-white">Edit Subject</h3>
               <button
                 onClick={() => setIsEditing(false)}
-                className="p-1 rounded-lg hover:bg-white/5 text-neutral-muted hover:text-white transition-colors"
+                className="rounded-full p-1.5 text-neutral-500 transition-colors hover:bg-white/5 hover:text-white"
               >
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleUpdate} className="space-y-6">
+            <form onSubmit={handleUpdate} className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-neutral-muted uppercase tracking-wider mb-2">
-                  Subject Name
-                </label>
+                <label className="mb-2 block text-[11px] uppercase tracking-[0.24em] text-neutral-500">Subject name</label>
                 <input
                   type="text"
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   className="ypt-input"
-                  placeholder="e.g. Mathematics"
+                  placeholder="Subject name"
                   autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-neutral-muted uppercase tracking-wider mb-3">
-                  Color
-                </label>
+                <label className="mb-3 block text-[11px] uppercase tracking-[0.24em] text-neutral-500">Color</label>
                 <div className="flex flex-wrap gap-3">
-                  {COLORS.map((c) => (
+                  {SUBJECT_COLORS.map((color) => (
                     <button
-                      key={c.bg}
+                      key={color.value}
                       type="button"
-                      onClick={() => setEditColor(c.bg)}
+                      onClick={() => setEditColor(color.value)}
                       className={cn(
-                        'w-8 h-8 rounded-full transition-all hover:scale-110',
-                        c.bg,
-                        editColor === c.bg &&
-                          'ring-2 ring-white ring-offset-2 ring-offset-neutral-surface scale-110'
+                        'h-10 rounded-full border px-4 text-sm transition-all',
+                        color.value,
+                        editColor === color.value
+                          ? 'border-white text-white scale-[1.02]'
+                          : 'border-white/10 text-white/80 opacity-80 hover:opacity-100'
                       )}
-                      title={c.label}
-                    />
+                    >
+                      {color.label}
+                    </button>
                   ))}
                 </div>
               </div>
 
               <button
                 type="submit"
-                className="w-full ypt-btn-primary py-3 text-sm font-bold"
+                className="w-full ypt-btn-primary py-3 text-sm font-medium"
               >
-                Save Changes
+                Save
               </button>
             </form>
           </div>

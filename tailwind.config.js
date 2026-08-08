@@ -29,19 +29,16 @@ export default {
         }
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'monospace'],
-      },
-      fontSize: {
-        'timer-hero': ['7rem', { lineHeight: '1', letterSpacing: '-0.04em', fontWeight: '800' }],
+        sans: ['Poppins', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       borderRadius: {
         '4xl': '2rem',
       },
       boxShadow: {
-        'glow': '0 0 20px rgba(255, 107, 71, 0.15)',
-        'glow-lg': '0 0 40px rgba(255, 107, 71, 0.2)',
-        'card': '0 1px 3px rgba(0,0,0,0.5), 0 1px 2px rgba(0,0,0,0.4)',
+        'glow': '0 0 20px rgba(255, 255, 255, 0.08)',
+        'glow-lg': '0 0 40px rgba(255, 255, 255, 0.12)',
+        'card': '0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25)',
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

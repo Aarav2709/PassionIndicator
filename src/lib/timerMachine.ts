@@ -54,6 +54,40 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
       };
     }
 
+    case 'PAUSE_SESSION': {
+      if (state.mode !== 'focusing' || !state.focusStartedAt) {
+        return state;
+      }
+
+      const focusElapsed = Math.floor((now - state.focusStartedAt) / 1000);
+
+      return {
+        ...state,
+        mode: 'break',
+        focusStartedAt: null,
+        breakStartedAt: now,
+        accumulatedFocus: state.accumulatedFocus + focusElapsed,
+        isFullscreen: true,
+      };
+    }
+
+    case 'RESUME_SESSION': {
+      if (state.mode !== 'break' || !state.breakStartedAt) {
+        return state;
+      }
+
+      const breakElapsed = Math.floor((now - state.breakStartedAt) / 1000);
+
+      return {
+        ...state,
+        mode: 'focusing',
+        breakStartedAt: null,
+        focusStartedAt: now,
+        accumulatedBreak: state.accumulatedBreak + breakElapsed,
+        isFullscreen: true,
+      };
+    }
+
     case 'SWITCH_SUBJECT': {
       if (state.mode === 'idle') {
         return timerReducer(state, { type: 'START_SESSION', subjectId: event.subjectId });
@@ -143,9 +177,7 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
 
       return {
         ...state,
-        mode: 'break',
         isFullscreen: false,
-        breakStartedAt: now,
       };
     }
 

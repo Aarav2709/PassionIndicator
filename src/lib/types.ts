@@ -2,6 +2,7 @@ export interface Subject {
   id: string;
   name: string;
   color: string;
+  order: number;
   createdAt: number;
 }
 
@@ -33,7 +34,11 @@ export interface DailyStats {
   lastSessionAt: number | null;
 }
 
-export type TimerMode = 'idle' | 'focusing' | 'break';
+export type TimerMode =
+  | 'idle'
+  | 'focusing'
+  | 'break';
+
 
 export interface PomodoroSettings {
   enabled: boolean;
@@ -51,45 +56,88 @@ export const DEFAULT_POMODORO: PomodoroSettings = {
   longBreakInterval: 4,
 };
 
+
 export interface TimerState {
   mode: TimerMode;
+
   activeSubjectId: string | null;
   activeSessionId: string | null;
+
   sessionStartedAt: number | null;
   focusStartedAt: number | null;
   breakStartedAt: number | null;
+
   accumulatedFocus: number;
   accumulatedBreak: number;
+
   isFullscreen: boolean;
+
   pomodoroCount: number;
-  pomodoroPhase: 'focus' | 'shortBreak' | 'longBreak' | null;
+  pomodoroPhase:
+    | 'focus'
+    | 'shortBreak'
+    | 'longBreak'
+    | null;
 }
+
 
 export type TimerEvent =
-  | { type: 'START_SESSION'; subjectId: string }
-  | { type: 'STOP_SESSION' }
-  | { type: 'PAUSE_SESSION' }
-  | { type: 'RESUME_SESSION' }
-  | { type: 'SWITCH_SUBJECT'; subjectId: string }
-  | { type: 'FULLSCREEN_ENTER' }
-  | { type: 'FULLSCREEN_EXIT' }
-  | { type: 'POMODORO_FOCUS_COMPLETE'; settings?: PomodoroSettings }
-  | { type: 'POMODORO_BREAK_COMPLETE' }
-  | { type: 'TICK' };
+  | {
+      type: 'START_SESSION';
+      subjectId: string;
+    }
+  | {
+      type: 'STOP_SESSION';
+    }
+  | {
+      type: 'PAUSE_SESSION';
+    }
+  | {
+      type: 'RESUME_SESSION';
+    }
+  | {
+      type: 'SWITCH_SUBJECT';
+      subjectId: string;
+    }
+  | {
+      type: 'FULLSCREEN_ENTER';
+    }
+  | {
+      type: 'FULLSCREEN_EXIT';
+    }
+  | {
+      type: 'POMODORO_FOCUS_COMPLETE';
+      settings?: PomodoroSettings;
+    }
+  | {
+      type: 'POMODORO_BREAK_COMPLETE';
+    }
+  | {
+      type: 'TICK';
+    };
+
 
 export interface AppSettings {
-  dDayDate: string | null;     // ISO date string e.g. '2026-11-15'
-  dDayLabel: string;            // e.g. 'Exam Day' or 'SAT'
-  dailyGoalSeconds: number;     // daily study goal in seconds
-  theme: 'coral' | 'blue' | 'purple' | 'green' | 'pink';
+  dDayDate: string | null;
+  dDayLabel: string;
+  dailyGoalSeconds: number;
+
+  theme:
+    | 'coral'
+    | 'blue'
+    | 'purple'
+    | 'green'
+    | 'pink';
 }
+
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   dDayDate: null,
   dDayLabel: 'D-Day',
-  dailyGoalSeconds: 8 * 3600,  // 8 hours default
+  dailyGoalSeconds: 8 * 3600,
   theme: 'coral',
 };
+
 
 export const THEME_COLORS: Record<string, string> = {
   coral: '255 107 71',
@@ -98,6 +146,7 @@ export const THEME_COLORS: Record<string, string> = {
   green: '34 197 94',
   pink: '236 72 153',
 };
+
 
 export const STORAGE_KEYS = {
   SUBJECTS: 'pi_subjects',
@@ -109,8 +158,10 @@ export const STORAGE_KEYS = {
   APP_SETTINGS: 'pi_app_settings',
 } as const;
 
+
 export const DB_NAME = 'PassionIndicatorDB';
 export const DB_VERSION = 1;
+
 
 export const STORES = {
   SUBJECTS: 'subjects',
@@ -119,27 +170,43 @@ export const STORES = {
   DAILY_STATS: 'dailyStats',
 } as const;
 
+
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
-export function getDateKey(timestamp: number = Date.now()): string {
+
+export function getDateKey(
+  timestamp: number = Date.now()
+): string {
   const d = new Date(timestamp);
+
   return d.toISOString().split('T')[0];
 }
 
-export function formatTime(seconds: number): string {
+
+export function formatTime(
+  seconds: number
+): string {
+
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
+
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-export function formatTimeCompact(seconds: number): string {
+
+export function formatTimeCompact(
+  seconds: number
+): string {
+
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
+
   if (h > 0) {
     return `${h}:${String(m).padStart(2, '0')}`;
   }
+
   return `${m}m`;
 }

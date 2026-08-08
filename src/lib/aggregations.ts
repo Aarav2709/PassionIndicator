@@ -202,7 +202,9 @@ export interface SubjectWithStats extends Subject {
 }
 
 export async function getSubjectsWithStats(): Promise<SubjectWithStats[]> {
-  const subjects = await getSubjects();
+  const subjects = (await getSubjects()).sort(
+    (a, b) => a.order - b.order
+  );
   const allSessions = await getSessions();
 
   const today = getDateKey();

@@ -11,6 +11,7 @@ import React, {
 import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, AppSettings, DEFAULT_APP_SETTINGS, formatTime, getDateKey } from '@/lib/types';
 import {
   createSubject as dbCreateSubject,
+  deleteTodo,
   saveSubject,
   deleteSubject as dbDeleteSubject,
   getTodos,
@@ -40,8 +41,13 @@ import {
 } from '@/lib/timerMachine';
 import { getSubjectsWithStats, SubjectWithStats } from '@/lib/aggregations';
 import { getTodayStats } from '@/lib/aggregations';
+import { reorderSubjects } from "@/lib/storage";
 
 interface TimerContextType {
+  moveSubjects: (
+  oldIndex: number,
+  newIndex: number
+  ) => Promise<void>;
   subjects: SubjectWithStats[];
   refreshSubjects: () => Promise<void>;
   addSubject: (name: string, color: string) => Promise<void>;
@@ -50,6 +56,7 @@ interface TimerContextType {
   todos: Todo[];
   addTodo: (subjectId: string, title: string) => Promise<void>;
   toggleTodo: (subjectId: string, todoId: string) => Promise<void>;
+  deleteTodo: (todoId: string) => Promise<void>;
   timerState: TimerState;
   displayTimes: DisplayTimes;
   isFullscreen: boolean;
@@ -227,6 +234,11 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [todos, refreshTodos]);
 
+  const removeTodo = useCallback(async (todoId: string) => {
+    await deleteTodo(todoId);
+    await refreshTodos();
+  }, [refreshTodos]);
+
   const startSession = useCallback(async (subjectId: string) => {
     const session = await createSession(subjectId);
     pendingSessionRef.current = { id: session.id, subjectId };
@@ -304,30 +316,54 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ? subjects.find(s => s.id === timerState.activeSubjectId) || null
     : null;
 
+    const moveSubjects = useCallback(async (
+    oldIndex: number,
+    newIndex: number
+  ) => {
+    const updated = [...subjects];
+
+    const [moved] = updated.splice(oldIndex, 1);
+    updated.splice(newIndex, 0, moved);
+
+    await reorderSubjects(updated);
+    await refreshSubjects();
+  }, [subjects, refreshSubjects]);
+
   const contextValue: TimerContextType = {
+    deleteTodo: removeTodo,
     subjects,
     refreshSubjects,
     addSubject,
     updateSubject,
     deleteSubject,
+
+    moveSubjects,
+
     todos,
     addTodo,
     toggleTodo,
+
     timerState,
     displayTimes,
     isFullscreen: timerState.isFullscreen,
+
     startSession,
     stopSession,
     pauseSession,
     resumeSession,
     switchSubject,
+
     todayTotalFocus,
     activeSubject,
+
     formatTime,
+
     pomodoroSettings,
     updatePomodoroSettings,
+
     appSettings,
     updateAppSettings,
+
     dDayCount,
     todayTotalBreak,
   };

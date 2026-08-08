@@ -19,25 +19,16 @@ The app keeps one main dashboard, a fullscreen study overlay, and a simple subje
 
 ## What it does
 
-The dashboard shows total study time and break time.
+The dashboard shows study time and subjects. 
 
-Each subject can be started, renamed, or deleted.
+Each subject can be started, renamed, or deleted, and choose different beautiful colors too!
 
-Starting a subject opens a fullscreen timer view with a clear green state while studying and a red state while on break.
+Starting a subject opens a fullscreen timer view with a clear green state while studying and a red state while on break. 
 
-## Run it
+Automatically detects changes and stops the timer.
 
-```bash
-npm install
-npm run dev
-```
+Saves your progress too!
 
-## Build it
+It also has pomodoro mode! So choose whatever you like to use <3
 
-```bash
-npm run build
-```
 
-## Notes
-
-The project is intentionally small for now. Extra screens and navigation were removed so the main study flow stays simple.

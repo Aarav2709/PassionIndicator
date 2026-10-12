@@ -23,22 +23,7 @@ export interface Session {
   breakDuration: number;
 }
 
-export interface DailyStats {
-  date: string;
-  totalFocusTime: number;
-  totalBreakTime: number;
-  sessionCount: number;
-  maxFocusStreak: number;
-  subjectBreakdown: Record<string, number>;
-  firstSessionAt: number | null;
-  lastSessionAt: number | null;
-}
-
-export type TimerMode =
-  | 'idle'
-  | 'focusing'
-  | 'break';
-
+export type TimerMode = 'idle' | 'focusing' | 'break';
 
 export interface PomodoroSettings {
   enabled: boolean;
@@ -56,157 +41,71 @@ export const DEFAULT_POMODORO: PomodoroSettings = {
   longBreakInterval: 4,
 };
 
-
 export interface TimerState {
   mode: TimerMode;
-
   activeSubjectId: string | null;
   activeSessionId: string | null;
-
   sessionStartedAt: number | null;
   focusStartedAt: number | null;
   breakStartedAt: number | null;
-
   accumulatedFocus: number;
   accumulatedBreak: number;
-
   isFullscreen: boolean;
-
   pomodoroCount: number;
-  pomodoroPhase:
-    | 'focus'
-    | 'shortBreak'
-    | 'longBreak'
-    | null;
+  pomodoroPhase: 'focus' | 'shortBreak' | 'longBreak' | null;
 }
-
 
 export type TimerEvent =
-  | {
-      type: 'START_SESSION';
-      subjectId: string;
-    }
-  | {
-      type: 'STOP_SESSION';
-    }
-  | {
-      type: 'PAUSE_SESSION';
-    }
-  | {
-      type: 'RESUME_SESSION';
-    }
-  | {
-      type: 'SWITCH_SUBJECT';
-      subjectId: string;
-    }
-  | {
-      type: 'FULLSCREEN_ENTER';
-    }
-  | {
-      type: 'FULLSCREEN_EXIT';
-    }
-  | {
-      type: 'POMODORO_FOCUS_COMPLETE';
-      settings?: PomodoroSettings;
-    }
-  | {
-      type: 'POMODORO_BREAK_COMPLETE';
-    }
-  | {
-      type: 'TICK';
-    };
+  | { type: 'START_SESSION'; subjectId: string; sessionId: string }
+  | { type: 'STOP_SESSION' }
+  | { type: 'PAUSE_SESSION' }
+  | { type: 'RESUME_SESSION' }
+  | { type: 'FULLSCREEN_ENTER' }
+  | { type: 'FULLSCREEN_EXIT' }
+  | { type: 'POMODORO_FOCUS_COMPLETE'; settings: PomodoroSettings }
+  | { type: 'POMODORO_BREAK_COMPLETE' };
 
-
-export interface AppSettings {
-  dDayDate: string | null;
-  dDayLabel: string;
-  dailyGoalSeconds: number;
-
-  theme:
-    | 'coral'
-    | 'blue'
-    | 'purple'
-    | 'green'
-    | 'pink';
-}
-
-
-export const DEFAULT_APP_SETTINGS: AppSettings = {
-  dDayDate: null,
-  dDayLabel: 'D-Day',
-  dailyGoalSeconds: 8 * 3600,
-  theme: 'coral',
-};
-
-
-export const THEME_COLORS: Record<string, string> = {
-  coral: '255 107 71',
-  blue: '59 130 246',
-  purple: '147 51 234',
-  green: '34 197 94',
-  pink: '236 72 153',
-};
-
+export const SUBJECT_COLORS = [
+  { value: 'bg-subject-math', label: 'Orange' },
+  { value: 'bg-subject-science', label: 'Gold' },
+  { value: 'bg-subject-history', label: 'Sand' },
+  { value: 'bg-subject-english', label: 'Blue' },
+  { value: 'bg-emerald-500', label: 'Green' },
+  { value: 'bg-rose-500', label: 'Rose' },
+  { value: 'bg-violet-500', label: 'Violet' },
+  { value: 'bg-cyan-500', label: 'Cyan' },
+] as const;
 
 export const STORAGE_KEYS = {
-  SUBJECTS: 'pi_subjects',
-  TODOS: 'pi_todos',
-  SESSIONS: 'pi_sessions',
-  DAILY_STATS: 'pi_daily_stats',
   ACTIVE_STATE: 'pi_active_state',
   POMODORO_SETTINGS: 'pi_pomodoro_settings',
-  APP_SETTINGS: 'pi_app_settings',
 } as const;
-
 
 export const DB_NAME = 'PassionIndicatorDB';
 export const DB_VERSION = 1;
-
 
 export const STORES = {
   SUBJECTS: 'subjects',
   TODOS: 'todos',
   SESSIONS: 'sessions',
-  DAILY_STATS: 'dailyStats',
 } as const;
-
 
 export function generateId(): string {
   return crypto.randomUUID();
 }
 
-
-export function getDateKey(
-  timestamp: number = Date.now()
-): string {
+// local calendar date, an iso string would give the utc date and push early morning study into yesterday
+export function getDateKey(timestamp: number = Date.now()): string {
   const d = new Date(timestamp);
-
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-
-export function formatTime(
-  seconds: number
-): string {
-
+export function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-
-export function formatTimeCompact(
-  seconds: number
-): string {
-
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}`;
-  }
-
-  return `${m}m`;
 }

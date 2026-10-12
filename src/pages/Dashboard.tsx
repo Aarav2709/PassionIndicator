@@ -1,53 +1,39 @@
 import { useState } from 'react';
-import SubjectItem from '../components/Dashboard/SubjectItem';
-import { useTimer } from '@/context/TimerContext';
 import { Plus } from 'lucide-react';
-import {
-  DndContext,
-  closestCenter,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { DndContext, DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import SubjectItem from '@/components/Dashboard/SubjectItem';
+import { useTimer } from '@/context/TimerContext';
+import { SUBJECT_COLORS, formatTime } from '@/lib/types';
 
-const SUBJECT_COLORS = [
-  { value: 'bg-subject-math', label: 'Orange' },
-  { value: 'bg-subject-science', label: 'Gold' },
-  { value: 'bg-subject-history', label: 'Sand' },
-  { value: 'bg-subject-english', label: 'Blue' },
-  { value: 'bg-emerald-500', label: 'Green' },
-  { value: 'bg-rose-500', label: 'Rose' },
-  { value: 'bg-violet-500', label: 'Violet' },
-  { value: 'bg-cyan-500', label: 'Cyan' },
-] as const;
+const pickRandomColor = () => SUBJECT_COLORS[Math.floor(Math.random() * SUBJECT_COLORS.length)].value;
 
 const Dashboard = () => {
-  const {
-    subjects,
-    todayTotalFocus,
-    pomodoroSettings,
-    updatePomodoroSettings,
-    formatTime,
-    addSubject,
-    moveSubjects,
-  } = useTimer();
+  const { subjects, todayTotalFocus, pomodoroSettings, updatePomodoroSettings, addSubject, moveSubjects } = useTimer();
 
   const [newSubject, setNewSubject] = useState('');
 
-  const pickRandomColor = () =>
-    SUBJECT_COLORS[Math.floor(Math.random() * SUBJECT_COLORS.length)].value;
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (newSubject.trim()) {
-      addSubject(newSubject.trim(), pickRandomColor());
-      setNewSubject('');
-    }
+    const name = newSubject.trim();
+    if (!name) return;
+    addSubject(name, pickRandomColor());
+    setNewSubject('');
   };
 
-  const todayLabel = new Date().toLocaleDateString('en-US', {
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = subjects.findIndex(s => s.id === active.id);
+    const newIndex = subjects.findIndex(s => s.id === over.id);
+    if (oldIndex !== -1 && newIndex !== -1) moveSubjects(oldIndex, newIndex);
+  };
+
+  const todayLabel = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -55,30 +41,22 @@ const Dashboard = () => {
   });
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
-
+    <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-5 sm:px-6 lg:px-8">
       <section className="rounded-[2rem] border border-[#1a1a1a] bg-[#080808] px-6 py-8 text-center shadow-[0_20px_80px_rgba(0,0,0,0.35)] sm:px-10 sm:py-10">
-        <h2 className="text-sm text-neutral-500">
-          {todayLabel}
-        </h2>
+        <h2 className="text-sm text-neutral-500">{todayLabel}</h2>
 
-        <div className="mt-8 text-[clamp(4rem,12vw,7.5rem)] font-medium leading-none text-white">
+        <div className="mt-8 text-[clamp(4rem,12vw,7.5rem)] font-medium leading-none tabular-nums text-white">
           {formatTime(todayTotalFocus)}
         </div>
 
         <div className="mt-8 flex items-center justify-center">
-          <span className="mr-3 text-xs uppercase tracking-[0.22em] text-neutral-500">
-            Pomodoro
-          </span>
+          <span className="mr-3 text-xs uppercase tracking-[0.22em] text-neutral-500">Pomodoro</span>
 
           <button
             type="button"
-            onClick={() =>
-              updatePomodoroSettings({
-                enabled: !pomodoroSettings.enabled,
-              })
-            }
-            aria-pressed={pomodoroSettings.enabled}
+            role="switch"
+            onClick={() => updatePomodoroSettings({ enabled: !pomodoroSettings.enabled })}
+            aria-checked={pomodoroSettings.enabled}
             aria-label="Pomodoro mode"
             className={
               pomodoroSettings.enabled
@@ -97,84 +75,40 @@ const Dashboard = () => {
         </div>
       </section>
 
-
       <section className="rounded-[2rem] border border-[#1a1a1a] bg-[#080808] px-4 py-2 sm:px-6">
+        {subjects.length > 0 ? (
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={subjects.map(s => s.id)} strategy={verticalListSortingStrategy}>
+              {subjects.map(subject => (
+                <SubjectItem key={subject.id} subject={subject} />
+              ))}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-[#1a1a1a] p-6 text-sm text-neutral-500">No subjects yet.</div>
+        )}
 
-        <div className="space-y-0">
+        <form onSubmit={handleCreate} className="mt-6 grid gap-3 pb-4 sm:grid-cols-[1fr_auto]">
+          <input
+            value={newSubject}
+            onChange={e => setNewSubject(e.target.value)}
+            maxLength={40}
+            className="ypt-input"
+            placeholder="Add subject"
+            aria-label="Add subject"
+          />
 
-          {subjects.length > 0 && (
-            <DndContext
-              collisionDetection={closestCenter}
-              onDragEnd={(event) => {
-                const { active, over } = event;
-
-                if (!over || active.id === over.id) return;
-
-                const oldIndex = subjects.findIndex(
-                  (s) => s.id === active.id
-                );
-
-                const newIndex = subjects.findIndex(
-                  (s) => s.id === over.id
-                );
-
-                if (oldIndex !== -1 && newIndex !== -1) {
-                  moveSubjects(oldIndex, newIndex);
-                }
-              }}
-            >
-              <SortableContext
-                items={subjects.map((s) => s.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {subjects.map((subject) => (
-                  <SubjectItem
-                    key={subject.id}
-                    subject={subject}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          )}
-
-
-          {subjects.length === 0 && (
-            <div className="rounded-2xl border border-[#1a1a1a] p-6 text-sm text-neutral-500">
-              No subjects yet.
-            </div>
-          )}
-
-        </div>
-
-
-        <form
-          onSubmit={handleCreate}
-          className="mt-6 flex flex-col gap-4 pb-4"
-        >
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-
-            <input
-              value={newSubject}
-              onChange={(e) => setNewSubject(e.target.value)}
-              className="ypt-input"
-              placeholder="Add subject"
-              aria-label="Add subject"
-            />
-
-            <button
-              type="submit"
-              className="ypt-btn-primary inline-flex items-center justify-center gap-2 px-5"
-            >
-              <Plus size={14} />
-              Add
-            </button>
-
-          </div>
+          <button
+            type="submit"
+            disabled={!newSubject.trim()}
+            className="ypt-btn-primary inline-flex items-center justify-center gap-2 px-5 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Plus size={14} />
+            Add
+          </button>
         </form>
-
       </section>
-
-    </div>
+    </main>
   );
 };
 

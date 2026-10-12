@@ -1,206 +1,153 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useReducer,
-  useCallback,
-  useRef,
-} from 'react';
+import React, { createContext, useContext, useState, useEffect, useReducer, useCallback, useRef } from 'react';
 
-import { Todo, TimerState, PomodoroSettings, DEFAULT_POMODORO, AppSettings, DEFAULT_APP_SETTINGS, formatTime, getDateKey } from '@/lib/types';
+import { Todo, TimerState, PomodoroSettings } from '@/lib/types';
 import {
   createSubject as dbCreateSubject,
-  deleteTodo,
   saveSubject,
   deleteSubject as dbDeleteSubject,
+  reorderSubjects,
   getTodos,
   createTodo as dbCreateTodo,
   saveTodo,
+  deleteTodo as dbDeleteTodo,
   createSession,
-  endSession,
-  saveTimerState,
-  getTimerState,
-  clearTimerState,
+  updateSessionProgress,
   initializeStorage,
-  recomputeDailyStats,
   getPomodoroSettings,
   savePomodoroSettings,
-  getAppSettings,
-  saveAppSettings,
 } from '@/lib/storage';
-import {
-  createInitialState,
-  timerReducer,
-  getDisplayTimes,
-  enterFullscreen,
-  exitFullscreen,
-  isCurrentlyFullscreen,
-  getFullscreenChangeEvent,
-  DisplayTimes,
-} from '@/lib/timerMachine';
-import { getSubjectsWithStats, SubjectWithStats } from '@/lib/aggregations';
-import { getTodayStats } from '@/lib/aggregations';
-import { reorderSubjects } from "@/lib/storage";
+import { createInitialState, timerReducer, getDisplayTimes, enterFullscreen, exitFullscreen, DisplayTimes } from '@/lib/timerMachine';
+import { getSubjectsWithStats, SubjectWithStats, toSubject } from '@/lib/aggregations';
+
+const TICK_MS = 250;
+const PERSIST_MS = 15_000;
+const CHIME_SRC =
+  'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQwLTq3a6KpZBwd/2smmUAwFcNvJnE8FAnPizplPBAFv59SfUAQBcfLgqFkGAnj/9bVlCQJ5AP/HdQ0DeAH/0H8PA3oC/9aGEAR8A//aiRIEfgP/3YsTBH8E/9+OFASAAv/gjxQEgAL/4I8UBIAC/9+OFAR/BP/djBMEfgP/2okSBHwD/9aGEAN6Av/QfxADeQH/x3UNAnj/9bRkCQJy8+CnWQYBb+fUnlAEAXPiyppQBQJw28mcTwUGf9rIpVIMB0+t2uipWQ0LTKja6KxfEAtAot3fsG0SDjOY4d25dxUQLJXk57+BGBUlj+bswokZFiGJ6O/IjxgXH4Xq8suSGBcdhuvzzZQYFxyE7PTPlBgXHYXr88yTGBcehurzy5IYFx+F6vHJkBgXIYfp78eLGBYjiunswoYYFSSR5ui9fxYTK5bj4bVzFA4ynuHZrWYQCUCj3c+dVgsIS67e0ppLBgRf0cmXSwQCX9nTmU4DAl/h2p1SAwJn7+GmXAUDcf3ytnAJBHkGAMh9DgV7CADU';
 
 interface TimerContextType {
-  moveSubjects: (
-  oldIndex: number,
-  newIndex: number
-  ) => Promise<void>;
   subjects: SubjectWithStats[];
-  refreshSubjects: () => Promise<void>;
   addSubject: (name: string, color: string) => Promise<void>;
   updateSubject: (id: string, name: string, color: string) => Promise<void>;
   deleteSubject: (id: string) => Promise<void>;
+  moveSubjects: (oldIndex: number, newIndex: number) => Promise<void>;
   todos: Todo[];
   addTodo: (subjectId: string, title: string) => Promise<void>;
-  toggleTodo: (subjectId: string, todoId: string) => Promise<void>;
+  toggleTodo: (todoId: string) => Promise<void>;
   deleteTodo: (todoId: string) => Promise<void>;
   timerState: TimerState;
   displayTimes: DisplayTimes;
-  isFullscreen: boolean;
   startSession: (subjectId: string) => Promise<void>;
   stopSession: () => Promise<void>;
   pauseSession: () => Promise<void>;
   resumeSession: () => Promise<void>;
-  switchSubject: (subjectId: string) => void;
   todayTotalFocus: number;
   activeSubject: SubjectWithStats | null;
-  formatTime: (seconds: number) => string;
   pomodoroSettings: PomodoroSettings;
   updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void;
-  appSettings: AppSettings;
-  updateAppSettings: (settings: Partial<AppSettings>) => void;
-  dDayCount: number | null;
-  todayTotalBreak: number;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
 
+function sameTimes(a: DisplayTimes, b: DisplayTimes): boolean {
+  return a.currentFocus === b.currentFocus && a.currentBreak === b.currentBreak && a.pomodoroRemaining === b.pomodoroRemaining;
+}
+
 export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [subjects, setSubjects] = useState<SubjectWithStats[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
-  const [timerState, dispatch] = useReducer(timerReducer, createInitialState());
-  const [pomodoroSettings, setPomodoroSettings] = useState<PomodoroSettings>(DEFAULT_POMODORO);
-  const [displayTimes, setDisplayTimes] = useState<DisplayTimes>({
-    sessionDuration: 0,
-    currentFocus: 0,
-    currentBreak: 0,
-    currentSegment: 0,
-    pomodoroRemaining: DEFAULT_POMODORO.focusDuration,
-  });
-  const tickIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pendingSessionRef = useRef<{ id: string; subjectId: string } | null>(null);
-  const pomodoroAudioRef = useRef<HTMLAudioElement | null>(null);
-  const isStoppingSessionRef = useRef(false);
-  const [appSettings, setAppSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
-  const [todayTotalBreak, setTodayTotalBreak] = useState(0);
+  const [timerState, dispatch] = useReducer(timerReducer, undefined, createInitialState);
+  const [pomodoroSettings, setPomodoroSettings] = useState<PomodoroSettings>(getPomodoroSettings);
+  const [displayTimes, setDisplayTimes] = useState<DisplayTimes>(() => getDisplayTimes(createInitialState(), getPomodoroSettings()));
 
-  useEffect(() => {
-    async function init() {
-      await initializeStorage();
-      await refreshSubjects();
-      await refreshTodos();
-      const savedPomodoro = getPomodoroSettings();
-      setPomodoroSettings(savedPomodoro);
-      const savedAppSettings = getAppSettings();
-      setAppSettings(savedAppSettings);
-      const savedState = getTimerState();
-      if (savedState && savedState.mode !== 'idle') {
-        clearTimerState();
-      }
-      const todayStats = await getTodayStats();
-      setTodayTotalBreak(todayStats.totalBreakTime);
-    }
-    init();
-  }, []);
-
-  useEffect(() => {
-    if (timerState.mode !== 'idle') {
-      tickIntervalRef.current = setInterval(() => {
-        const times = getDisplayTimes(timerState, pomodoroSettings);
-        setDisplayTimes(times);
-
-        if (pomodoroSettings.enabled && times.pomodoroRemaining === 0) {
-          if (timerState.mode === 'focusing') {
-            playNotificationSound();
-            dispatch({ type: 'POMODORO_FOCUS_COMPLETE', settings: pomodoroSettings });
-            exitFullscreen();
-          } else if (timerState.mode === 'break') {
-            playNotificationSound();
-            dispatch({ type: 'POMODORO_BREAK_COMPLETE' });
-            enterFullscreen();
-          }
-        }
-      }, 100);
-    } else {
-      if (tickIntervalRef.current) {
-        clearInterval(tickIntervalRef.current);
-        tickIntervalRef.current = null;
-      }
-      setDisplayTimes({
-        sessionDuration: 0,
-        currentFocus: 0,
-        currentBreak: 0,
-        currentSegment: 0,
-        pomodoroRemaining: pomodoroSettings.focusDuration,
-      });
-    }
-
-    return () => {
-      if (tickIntervalRef.current) {
-        clearInterval(tickIntervalRef.current);
-      }
-    };
-  }, [timerState.mode, timerState.focusStartedAt, timerState.breakStartedAt, pomodoroSettings]);
-
-  const playNotificationSound = useCallback(() => {
-    try {
-      if (!pomodoroAudioRef.current) {
-        pomodoroAudioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQwLTq3a6KpZBwd/2smmUAwFcNvJnE8FAnPizplPBAFv59SfUAQBcfLgqFkGAnj/9bVlCQJ5AP/HdQ0DeAH/0H8PA3oC/9aGEAR8A//aiRIEfgP/3YsTBH8E/9+OFASAAv/gjxQEgAL/4I8UBIAC/9+OFAR/BP/djBMEfgP/2okSBHwD/9aGEAN6Av/QfxADeQH/x3UNAnj/9bRkCQJy8+CnWQYBb+fUnlAEAXPiyppQBQJw28mcTwUGf9rIpVIMB0+t2uipWQ0LTKja6KxfEAtAot3fsG0SDjOY4d25dxUQLJXk57+BGBUlj+bswokZFiGJ6O/IjxgXH4Xq8suSGBcdhuvzzZQYFxyE7PTPlBgXHYXr88yTGBcehurzy5IYFx+F6vHJkBgXIYfp78eLGBYjiunswoYYFSSR5ui9fxYTK5bj4bVzFA4ynuHZrWYQCUCj3c+dVgsIS67e0ppLBgRf0cmXSwQCX9nTmU4DAl/h2p1SAwJn7+GmXAUDcf3ytnAJBHkGAMh9DgV7CADU');
-      }
-      pomodoroAudioRef.current.play().catch(() => { });
-    } catch { }
-  }, []);
-
-  useEffect(() => {
-    if (timerState.mode !== 'idle') {
-      saveTimerState(timerState);
-    }
-  }, [timerState]);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      if (isStoppingSessionRef.current) {
-        return;
-      }
-      const isFs = isCurrentlyFullscreen();
-      if (isFs) {
-        dispatch({ type: 'FULLSCREEN_ENTER' });
-      } else {
-        dispatch({ type: 'FULLSCREEN_EXIT' });
-      }
-    };
-
-    const eventName = getFullscreenChangeEvent();
-    document.addEventListener(eventName, handleFullscreenChange);
-
-    return () => {
-      document.removeEventListener(eventName, handleFullscreenChange);
-    };
-  }, []);
+  const stateRef = useRef(timerState);
+  stateRef.current = timerState;
+  const settingsRef = useRef(pomodoroSettings);
+  settingsRef.current = pomodoroSettings;
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const refreshSubjects = useCallback(async () => {
-    const data = await getSubjectsWithStats();
-    setSubjects(data);
-    const todayStats = await getTodayStats();
-    setTodayTotalBreak(todayStats.totalBreakTime);
+    setSubjects(await getSubjectsWithStats(stateRef.current.activeSessionId));
   }, []);
 
   const refreshTodos = useCallback(async () => {
-    const data = await getTodos();
-    setTodos(data);
+    setTodos(await getTodos());
+  }, []);
+
+  const persistProgress = useCallback((ended = false) => {
+    const state = stateRef.current;
+    if (!state.activeSessionId) return Promise.resolve();
+    const times = getDisplayTimes(state, settingsRef.current);
+    return updateSessionProgress(state.activeSessionId, times.currentFocus, times.currentBreak, ended);
+  }, []);
+
+  const playChime = useCallback(() => {
+    audioRef.current ??= new Audio(CHIME_SRC);
+    audioRef.current.currentTime = 0;
+    audioRef.current.play().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    initializeStorage().then(() => Promise.all([refreshSubjects(), refreshTodos()]));
+  }, [refreshSubjects, refreshTodos]);
+
+  // drives the visible clock and pomodoro transitions
+  useEffect(() => {
+    if (timerState.mode === 'idle') {
+      setDisplayTimes(getDisplayTimes(timerState, pomodoroSettings));
+      return;
+    }
+
+    const tick = () => {
+      const times = getDisplayTimes(timerState, pomodoroSettings);
+      setDisplayTimes(prev => (sameTimes(prev, times) ? prev : times));
+
+      if (!pomodoroSettings.enabled || times.pomodoroRemaining > 0) return;
+
+      if (timerState.mode === 'focusing') {
+        playChime();
+        dispatch({ type: 'POMODORO_FOCUS_COMPLETE', settings: pomodoroSettings });
+        exitFullscreen();
+      } else if (timerState.pomodoroPhase !== 'focus') {
+        playChime();
+        dispatch({ type: 'POMODORO_BREAK_COMPLETE' });
+        enterFullscreen();
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, TICK_MS);
+    return () => clearInterval(id);
+  }, [timerState, pomodoroSettings, playChime]);
+
+  // saves progress so a crash or closed tab loses at most a few seconds
+  useEffect(() => {
+    if (!timerState.activeSessionId) return;
+
+    const id = setInterval(() => persistProgress(), PERSIST_MS);
+    const onPageHide = () => persistProgress();
+    window.addEventListener('pagehide', onPageHide);
+
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [timerState.activeSessionId, persistProgress]);
+
+  // leaving fullscreen or the tab counts as a break
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      dispatch({ type: document.fullscreenElement ? 'FULLSCREEN_ENTER' : 'FULLSCREEN_EXIT' });
+    };
+    const onVisibilityChange = () => {
+      if (document.hidden) dispatch({ type: 'PAUSE_SESSION' });
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   const addSubject = useCallback(async (name: string, color: string) => {
@@ -210,67 +157,57 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const updateSubject = useCallback(async (id: string, name: string, color: string) => {
     const existing = subjects.find(s => s.id === id);
-    if (existing) {
-      await saveSubject({ ...existing, name, color });
-      await refreshSubjects();
-    }
+    if (!existing) return;
+    await saveSubject({ ...toSubject(existing), name, color });
+    await refreshSubjects();
   }, [subjects, refreshSubjects]);
 
   const deleteSubject = useCallback(async (id: string) => {
     await dbDeleteSubject(id);
-    await refreshSubjects();
-  }, [refreshSubjects]);
+    await Promise.all([refreshSubjects(), refreshTodos()]);
+  }, [refreshSubjects, refreshTodos]);
+
+  const moveSubjects = useCallback(async (oldIndex: number, newIndex: number) => {
+    const updated = [...subjects];
+    const [moved] = updated.splice(oldIndex, 1);
+    updated.splice(newIndex, 0, moved);
+    setSubjects(updated);
+    await reorderSubjects(updated.map(toSubject));
+  }, [subjects]);
 
   const addTodo = useCallback(async (subjectId: string, title: string) => {
     await dbCreateTodo(subjectId, title);
     await refreshTodos();
   }, [refreshTodos]);
 
-  const toggleTodo = useCallback(async (_subjectId: string, todoId: string) => {
+  const toggleTodo = useCallback(async (todoId: string) => {
     const todo = todos.find(t => t.id === todoId);
-    if (todo) {
-      await saveTodo({ ...todo, completed: !todo.completed });
-      await refreshTodos();
-    }
+    if (!todo) return;
+    await saveTodo({ ...todo, completed: !todo.completed });
+    await refreshTodos();
   }, [todos, refreshTodos]);
 
-  const removeTodo = useCallback(async (todoId: string) => {
-    await deleteTodo(todoId);
+  const deleteTodo = useCallback(async (todoId: string) => {
+    await dbDeleteTodo(todoId);
     await refreshTodos();
   }, [refreshTodos]);
 
   const startSession = useCallback(async (subjectId: string) => {
+    if (stateRef.current.mode !== 'idle') return;
+    // request fullscreen first while the click still counts as a user gesture
+    const fullscreen = enterFullscreen();
     const session = await createSession(subjectId);
-    pendingSessionRef.current = { id: session.id, subjectId };
-    await enterFullscreen();
-    dispatch({ type: 'START_SESSION', subjectId });
+    dispatch({ type: 'START_SESSION', subjectId, sessionId: session.id });
+    await fullscreen;
   }, []);
 
   const stopSession = useCallback(async () => {
-    isStoppingSessionRef.current = true;
-    try {
-      const finalTimes = getDisplayTimes(timerState, pomodoroSettings);
-      dispatch({ type: 'STOP_SESSION' });
-
-      if (pendingSessionRef.current) {
-        await endSession(
-          pendingSessionRef.current.id,
-          finalTimes.currentFocus,
-          finalTimes.currentBreak
-        );
-        await recomputeDailyStats(getDateKey());
-        pendingSessionRef.current = null;
-      }
-
-      clearTimerState();
-      await exitFullscreen();
-      document.documentElement.style.overflowY = '';
-      document.body.style.overflowY = '';
-      await refreshSubjects();
-    } finally {
-      isStoppingSessionRef.current = false;
-    }
-  }, [timerState, pomodoroSettings, refreshSubjects]);
+    await persistProgress(true);
+    dispatch({ type: 'STOP_SESSION' });
+    stateRef.current = createInitialState();
+    await exitFullscreen();
+    await refreshSubjects();
+  }, [persistProgress, refreshSubjects]);
 
   const pauseSession = useCallback(async () => {
     dispatch({ type: 'PAUSE_SESSION' });
@@ -282,97 +219,41 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await enterFullscreen();
   }, []);
 
-  const switchSubject = useCallback((subjectId: string) => {
-    if (pendingSessionRef.current) {
-      pendingSessionRef.current.subjectId = subjectId;
-    }
-    dispatch({ type: 'SWITCH_SUBJECT', subjectId });
-  }, []);
-
   const updatePomodoroSettings = useCallback((updates: Partial<PomodoroSettings>) => {
     setPomodoroSettings(prev => {
-      const newSettings = { ...prev, ...updates };
-      savePomodoroSettings(newSettings);
-      return newSettings;
+      const next = { ...prev, ...updates };
+      savePomodoroSettings(next);
+      return next;
     });
   }, []);
 
-  const updateAppSettings = useCallback((updates: Partial<AppSettings>) => {
-    setAppSettings(prev => {
-      const newSettings = { ...prev, ...updates };
-      saveAppSettings(newSettings);
-      return newSettings;
-    });
-  }, []);
+  const todayTotalFocus = subjects.reduce((acc, s) => acc + s.todayTime, 0) + displayTimes.currentFocus;
 
-  // Compute D-Day
-  const dDayCount = appSettings.dDayDate
-    ? Math.ceil((new Date(appSettings.dDayDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
-
-  const todayTotalFocus = subjects.reduce((acc, s) => acc + s.todayTime, 0);
-
-  const activeSubject = timerState.activeSubjectId
-    ? subjects.find(s => s.id === timerState.activeSubjectId) || null
-    : null;
-
-    const moveSubjects = useCallback(async (
-    oldIndex: number,
-    newIndex: number
-  ) => {
-    const updated = [...subjects];
-
-    const [moved] = updated.splice(oldIndex, 1);
-    updated.splice(newIndex, 0, moved);
-
-    await reorderSubjects(updated);
-    await refreshSubjects();
-  }, [subjects, refreshSubjects]);
+  const activeSubject = subjects.find(s => s.id === timerState.activeSubjectId) ?? null;
 
   const contextValue: TimerContextType = {
-    deleteTodo: removeTodo,
     subjects,
-    refreshSubjects,
     addSubject,
     updateSubject,
     deleteSubject,
-
     moveSubjects,
-
     todos,
     addTodo,
     toggleTodo,
-
+    deleteTodo,
     timerState,
     displayTimes,
-    isFullscreen: timerState.isFullscreen,
-
     startSession,
     stopSession,
     pauseSession,
     resumeSession,
-    switchSubject,
-
     todayTotalFocus,
     activeSubject,
-
-    formatTime,
-
     pomodoroSettings,
     updatePomodoroSettings,
-
-    appSettings,
-    updateAppSettings,
-
-    dDayCount,
-    todayTotalBreak,
   };
 
-  return (
-    <TimerContext.Provider value={contextValue}>
-      {children}
-    </TimerContext.Provider>
-  );
+  return <TimerContext.Provider value={contextValue}>{children}</TimerContext.Provider>;
 };
 
 export const useTimer = () => {

@@ -19,6 +19,7 @@ A minimal dark study timer for the web. Recreation of Yeolpumta for Desktop, but
 - The dashboard shows study time and subjects. 
 - Each subject can be started, renamed, or deleted, and choose different beautiful colors too!
 - Starting a subject opens a fullscreen timer view with a clear green state while studying and a red state while on break.
-- Automatically detects changes and stops the timer.
+- Leaving fullscreen or switching tabs automatically puts you on break, just like locking your phone in Yeolpumta.
+- Press Space in the study screen to pause or resume.
 - Saves your progress too!
 - It also has pomodoro mode! So choose whatever you like to use <3

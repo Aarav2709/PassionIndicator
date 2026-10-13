@@ -13,7 +13,6 @@ export function createInitialState(): TimerState {
     accumulatedBreak: 0,
     maxFocusSegment: 0,
     segments: [],
-    isFullscreen: false,
     pomodoroCount: 0,
     pomodoroPhase: null,
     flight: null,
@@ -24,7 +23,7 @@ function secondsSince(start: number | null, now: number): number {
   return start ? Math.floor((now - start) / 1000) : 0;
 }
 
-function toBreak(state: TimerState, now: number, isFullscreen: boolean): TimerState {
+function toBreak(state: TimerState, now: number): TimerState {
   const focused = secondsSince(state.focusStartedAt, now);
   return {
     ...state,
@@ -34,7 +33,6 @@ function toBreak(state: TimerState, now: number, isFullscreen: boolean): TimerSt
     accumulatedFocus: state.accumulatedFocus + focused,
     maxFocusSegment: Math.max(state.maxFocusSegment, focused),
     segments: state.focusStartedAt ? [...state.segments, [state.focusStartedAt, now]] : state.segments,
-    isFullscreen,
   };
 }
 
@@ -43,14 +41,13 @@ export function currentSegments(state: TimerState, now: number = Date.now()): [n
   return state.mode === 'focusing' && state.focusStartedAt ? [...state.segments, [state.focusStartedAt, now]] : state.segments;
 }
 
-function toFocus(state: TimerState, now: number, isFullscreen: boolean): TimerState {
+function toFocus(state: TimerState, now: number): TimerState {
   return {
     ...state,
     mode: 'focusing',
     focusStartedAt: now,
     breakStartedAt: null,
     accumulatedBreak: state.accumulatedBreak + secondsSince(state.breakStartedAt, now),
-    isFullscreen,
     pomodoroPhase: state.pomodoroPhase === null ? null : 'focus',
   };
 }
@@ -68,7 +65,6 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
         activeSessionId: event.sessionId,
         sessionStartedAt: now,
         focusStartedAt: now,
-        isFullscreen: true,
         pomodoroPhase: plan.kind === 'pomodoro' ? 'focus' : null,
         flight: {
           kind: plan.kind,
@@ -88,17 +84,17 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
       return createInitialState();
 
     case 'PAUSE_SESSION':
-      return state.mode === 'focusing' ? toBreak(state, now, state.isFullscreen) : state;
+      return state.mode === 'focusing' ? toBreak(state, now) : state;
 
     case 'RESUME_SESSION':
-      return state.mode === 'break' ? toFocus(state, now, true) : state;
+      return state.mode === 'break' ? toFocus(state, now) : state;
 
     // the plane lands, the leg is logged and a layover starts at the destination
     case 'POMODORO_FOCUS_COMPLETE': {
       if (state.mode !== 'focusing' || !state.flight) return state;
       const pomodoroCount = state.pomodoroCount + 1;
       const isLongBreak = pomodoroCount % (event.settings.longBreakInterval || 4) === 0;
-      const next = toBreak(state, now, false);
+      const next = toBreak(state, now);
       const { flight } = state;
       return {
         ...next,
@@ -123,21 +119,9 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
     // boarding again after the layover, on to the next city
     case 'POMODORO_BREAK_COMPLETE': {
       if (state.mode !== 'break' || !state.flight) return state;
-      const next = toFocus(state, now, true);
+      const next = toFocus(state, now);
       return { ...next, flight: { ...state.flight, to: event.nextTo, legFocusStart: next.accumulatedFocus } };
     }
-
-    // coming back to fullscreen ends a manual break, but a layover keeps its own clock
-    case 'FULLSCREEN_ENTER':
-      if (state.mode === 'idle') return state;
-      return state.mode === 'break' && state.pomodoroPhase !== 'shortBreak' && state.pomodoroPhase !== 'longBreak'
-        ? toFocus(state, now, true)
-        : { ...state, isFullscreen: true };
-
-    // leaving fullscreen while focusing counts as a break, like yeolpumta locking the phone
-    case 'FULLSCREEN_EXIT':
-      if (state.mode === 'idle') return state;
-      return state.mode === 'focusing' ? toBreak(state, now, false) : { ...state, isFullscreen: false };
 
     default:
       return state;
@@ -196,26 +180,4 @@ export function getDisplayTimes(state: TimerState, settings: PomodoroSettings = 
     altitudeFt: profile.altitudeFt,
     phase: profile.phase,
   };
-}
-
-export async function enterFullscreen(): Promise<boolean> {
-  if (document.fullscreenElement || !document.fullscreenEnabled) return !!document.fullscreenElement;
-  try {
-    await document.documentElement.requestFullscreen();
-    return true;
-  } catch (error) {
-    console.warn('failed to enter fullscreen', error);
-    return false;
-  }
-}
-
-export async function exitFullscreen(): Promise<boolean> {
-  if (!document.fullscreenElement) return true;
-  try {
-    await document.exitFullscreen();
-    return true;
-  } catch (error) {
-    console.warn('failed to exit fullscreen', error);
-    return false;
-  }
 }

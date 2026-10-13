@@ -1,12 +1,17 @@
-import { useEffect, useMemo } from 'react';
-import { Pause, Play, PlaneLanding, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Expand, Globe2, LocateFixed, Map as MapIcon, Pause, Play, PlaneLanding, Volume2, VolumeX } from 'lucide-react';
 import { useTimer } from '@/context/TimerContext';
 import { formatClock, formatTime } from '@/lib/types';
 import { LonLat, distanceKm, formatDistance, formatSpeed, getAirport, interpolate, project, routePoints } from '@/lib/flights';
 import { cn } from '@/lib/utils';
 import WorldMap, { MapMarker, MapRoute } from '@/components/map/WorldMap';
+import Globe from '@/components/map/LazyGlobe';
+import type { CameraMode, GlobeMarker } from '@/components/map/Globe3D';
+import { WEBGL_HELP, supportsWebGL } from '@/lib/webgl';
 
 const DEFAULT_TITLE = document.title;
+
+const lonLat = (a: { lon: number; lat: number }): LonLat => [a.lon, a.lat];
 
 function unwrapNear(lon: number, ref: number): number {
   while (lon - ref > 180) lon -= 360;
@@ -24,7 +29,7 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 const PHASE_LABELS = { ground: 'On the ground', taxi: 'Taxiing', climb: 'Climbing', cruise: 'Cruising', descent: 'Descending' } as const;
 
 const InFlight = () => {
-  const { timerState, displayTimes, activeSubject, todos, todayTotalFocus, appSettings, muted, toggleMuted, stopSession, pauseSession, resumeSession } = useTimer();
+  const { timerState, displayTimes, activeSubject, todos, todayTotalFocus, appSettings, updateAppSettings, muted, toggleMuted, stopSession, pauseSession, resumeSession } = useTimer();
   const flight = timerState.flight;
   const active = timerState.mode !== 'idle' && !!flight && !!activeSubject;
   const isFlying = timerState.mode === 'focusing';
@@ -35,6 +40,14 @@ const InFlight = () => {
   const from = flight ? getAirport(flight.from) : null;
   const to = flight ? getAirport(flight.to) : null;
   const progress = displayTimes.progress;
+  const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
+  const [showHelp, setShowHelp] = useState(false);
+
+  useEffect(() => {
+    if (!showHelp) return;
+    const id = setTimeout(() => setShowHelp(false), 8000);
+    return () => clearTimeout(id);
+  }, [showHelp]);
 
   const geometry = useMemo(() => {
     if (!from || !to) return null;
@@ -47,7 +60,7 @@ const InFlight = () => {
     const [x1, y1] = project([lon, pos.lat]);
     const [x2, y2] = project([unwrapNear(ahead.lon, lon), ahead.lat]);
     const heading = progress >= 1 ? 0 : (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
-    return { full, flown, plane: { lon, lat: pos.lat, heading } };
+    return { full, flown, plane: { lon, lat: pos.lat, heading }, pos, ahead };
   }, [from, to, progress]);
 
   useEffect(() => {
@@ -95,6 +108,22 @@ const InFlight = () => {
     ? [[from.lon, from.lat], [geometry.plane.lon, geometry.plane.lat]]
     : [...geometry.full, ...flight.legs.map(leg => [getAirport(leg.from).lon, getAirport(leg.from).lat] as LonLat)];
 
+  const globeMarkers: GlobeMarker[] = markers.map(m => ({ at: [m.lon, m.lat], label: m.label, variant: m.variant }));
+  const globeHistory = flight.legs.map(leg => ({ from: lonLat(getAirport(leg.from)), to: lonLat(getAirport(leg.to)) }));
+  const isGlobe = appSettings.flightView === 'globe' && supportsWebGL();
+
+  const flatMap = (
+    <WorldMap
+      className="absolute inset-x-0 top-0 h-[74%] [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
+      frame={frame}
+      minSpan={hidden ? 40 : 32}
+      dotColor="#4a4a4a"
+      routes={routes}
+      markers={markers}
+      plane={onLayover ? undefined : geometry.plane}
+    />
+  );
+
   const arrivesAt = displayTimes.remaining !== null && !onLayover ? formatClock(Date.now() + displayTimes.remaining * 1000) : null;
 
   const note = onLayover
@@ -109,15 +138,24 @@ const InFlight = () => {
 
   return (
     <div className="fixed inset-0 z-[60] bg-black text-white animate-fade-in" role="dialog" aria-modal="true" aria-label="Focus flight">
-      <WorldMap
-        className="absolute inset-x-0 top-0 h-[74%] [mask-image:linear-gradient(to_bottom,black_70%,transparent)]"
-        frame={frame}
-        minSpan={hidden ? 40 : 32}
-        dotColor="#4a4a4a"
-        routes={routes}
-        markers={markers}
-        plane={onLayover ? undefined : geometry.plane}
-      />
+      {isGlobe ? (
+        <div className="absolute inset-0">
+          <Globe
+            fallback={flatMap}
+            route={onLayover ? null : { from: lonLat(from), to: lonLat(to) }}
+            progress={progress}
+            hideRoute={hidden}
+            showPlane={!onLayover}
+            history={globeHistory}
+            markers={globeMarkers}
+            focus={lonLat(to)}
+            camera={cameraMode}
+          />
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[50%] bg-gradient-to-t from-black via-black/80 to-transparent" />
+        </div>
+      ) : (
+        flatMap
+      )}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black via-black/70 to-transparent" />
 
       <header className="absolute inset-x-0 top-0 flex items-start justify-between gap-6 px-8 py-7">
@@ -137,6 +175,30 @@ const InFlight = () => {
             <p className="label">Today</p>
             <p className="mt-1 text-lg tabular-nums">{formatTime(todayTotalFocus)}</p>
           </div>
+          {isGlobe && !onLayover && (
+            <button
+              type="button"
+              onClick={() => setCameraMode(m => (m === 'follow' ? 'overview' : 'follow'))}
+              className="icon-btn mt-1"
+              aria-label={cameraMode === 'follow' ? 'Show the whole route' : 'Follow the plane'}
+              title={cameraMode === 'follow' ? 'Whole route' : 'Follow plane'}
+            >
+              {cameraMode === 'follow' ? <Expand size={17} /> : <LocateFixed size={17} />}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              // without webgl the globe cannot start, so explain instead of silently staying on the flat map
+              if (!isGlobe && !supportsWebGL()) setShowHelp(true);
+              else updateAppSettings({ flightView: isGlobe ? 'map' : 'globe' });
+            }}
+            className="icon-btn mt-1"
+            aria-label={isGlobe ? 'Show flat map' : 'Show globe'}
+            title={isGlobe ? 'Flat map' : 'Globe'}
+          >
+            {isGlobe ? <MapIcon size={17} /> : <Globe2 size={17} />}
+          </button>
           {appSettings.ambience !== 'off' && (
             <button type="button" onClick={toggleMuted} className="icon-btn mt-1" aria-label={muted ? 'Turn ambience on' : 'Mute ambience'} title={muted ? 'Ambience off' : 'Ambience on'}>
               {muted ? <VolumeX size={17} /> : <Volume2 size={17} />}
@@ -144,6 +206,12 @@ const InFlight = () => {
           )}
         </div>
       </header>
+
+      {showHelp && (
+        <div className="absolute right-8 top-24 max-w-sm rounded-2xl border border-white/10 bg-black/90 p-4 text-sm leading-relaxed text-neutral-300 backdrop-blur animate-fade-in" role="status">
+          {WEBGL_HELP}
+        </div>
+      )}
 
       <div className="absolute inset-x-0 bottom-0 px-8 pb-8">
         <div className="mx-auto flex max-w-6xl flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">

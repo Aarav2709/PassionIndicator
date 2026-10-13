@@ -23,7 +23,7 @@ import {
   getLocation,
   saveLocation,
 } from '@/lib/storage';
-import { createInitialState, timerReducer, getDisplayTimes, currentSegments, enterFullscreen, exitFullscreen, DisplayTimes } from '@/lib/timerMachine';
+import { createInitialState, timerReducer, getDisplayTimes, currentSegments, DisplayTimes } from '@/lib/timerMachine';
 import { getSubjectsWithStats, summarizeDay, SubjectWithStats, toSubject } from '@/lib/aggregations';
 import { distanceKm, getAirport, interpolate, nearestAirport, randomDestination } from '@/lib/flights';
 import { setAmbienceLevel, startAmbience, stopAmbience } from '@/lib/ambience';
@@ -250,7 +250,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       dispatch({ type: 'STOP_SESSION' });
       stateRef.current = createInitialState();
       if (arrived) announce(`Landed in ${getAirport(landedAt).city}`, 'Your focus flight is complete.');
-      await exitFullscreen();
       await Promise.all([refreshSubjects(), refreshTodos()]);
     } finally {
       finishingRef.current = false;
@@ -280,11 +279,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const longBreak = (timerState.pomodoroCount + 1) % (pomodoroSettings.longBreakInterval || 4) === 0;
         announce(`Landed in ${getAirport(flight.to).city}`, longBreak ? 'Long layover, stretch your legs.' : 'Short layover before the next leg.');
         dispatch({ type: 'POMODORO_FOCUS_COMPLETE', settings: pomodoroSettings });
-        exitFullscreen();
       } else if (flight.kind === 'pomodoro' && timerState.pomodoroPhase !== 'focus') {
         announce('Boarding the next leg', 'Back to focus.');
         dispatch({ type: 'POMODORO_BREAK_COMPLETE', nextTo: randomDestination(flight.from, pomodoroSettings.focusDuration).code });
-        enterFullscreen();
       }
     };
 
@@ -314,23 +311,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, ROLLOVER_CHECK_MS);
     return () => clearInterval(id);
   }, [todayKey, refreshSubjects]);
-
-  // leaving fullscreen or the tab counts as a break
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      dispatch({ type: document.fullscreenElement ? 'FULLSCREEN_ENTER' : 'FULLSCREEN_EXIT' });
-    };
-    const onVisibilityChange = () => {
-      if (document.hidden) dispatch({ type: 'PAUSE_SESSION' });
-    };
-
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', onFullscreenChange);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
-  }, []);
 
   const addSubject = useCallback(async (name: string, color: string) => {
     await dbCreateSubject(name, color);
@@ -401,8 +381,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const startSession = useCallback(async (subjectId: string, plan: BoardingPlan) => {
     if (stateRef.current.mode !== 'idle') return;
-    // request fullscreen first while the click still counts as a user gesture
-    const fullscreen = enterFullscreen();
     const session = await createSession(subjectId);
     setBoardingSubjectId(null);
     setArrival(null);
@@ -410,14 +388,12 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // the take off click is the user gesture browsers need before playing sound
     startAmbience(appSettingsRef.current.ambience, appSettingsRef.current.ambienceVolume);
     dispatch({ type: 'START_SESSION', subjectId, sessionId: session.id, from: location, plan });
-    await fullscreen;
   }, [location]);
 
   const stopSession = useCallback(() => finishSession(false), [finishSession]);
 
   const pauseSession = useCallback(async () => {
     dispatch({ type: 'PAUSE_SESSION' });
-    await exitFullscreen();
   }, []);
 
   // resuming from a layover boards the next leg instead of idling at the gate
@@ -429,7 +405,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } else {
       dispatch({ type: 'RESUME_SESSION' });
     }
-    await enterFullscreen();
   }, []);
 
   const dismissArrival = useCallback(() => setArrival(null), []);

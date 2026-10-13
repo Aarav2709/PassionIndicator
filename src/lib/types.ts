@@ -96,7 +96,6 @@ export interface TimerState {
   accumulatedBreak: number;
   maxFocusSegment: number;
   segments: [number, number][];
-  isFullscreen: boolean;
   pomodoroCount: number;
   pomodoroPhase: 'focus' | 'shortBreak' | 'longBreak' | null;
   flight: ActiveFlight | null;
@@ -107,8 +106,6 @@ export type TimerEvent =
   | { type: 'STOP_SESSION' }
   | { type: 'PAUSE_SESSION' }
   | { type: 'RESUME_SESSION' }
-  | { type: 'FULLSCREEN_ENTER' }
-  | { type: 'FULLSCREEN_EXIT' }
   | { type: 'POMODORO_FOCUS_COMPLETE'; settings: PomodoroSettings }
   | { type: 'POMODORO_BREAK_COMPLETE'; nextTo: string };
 
@@ -126,6 +123,7 @@ export const SUBJECT_COLORS = [
 export type DistanceUnit = 'km' | 'mi' | 'nm';
 export type SpeedUnit = 'kmh' | 'mph' | 'kts';
 export type AmbienceKind = 'off' | 'cabin' | 'rain';
+export type FlightView = 'globe' | 'map';
 
 export interface AppSettings {
   dailyGoalSeconds: number;
@@ -137,6 +135,7 @@ export interface AppSettings {
   speedUnit: SpeedUnit;
   ambience: AmbienceKind;
   ambienceVolume: number;
+  flightView: FlightView;
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -149,6 +148,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   speedUnit: 'kmh',
   ambience: 'cabin',
   ambienceVolume: 0.5,
+  flightView: 'globe',
 };
 
 export const STORAGE_KEYS = {

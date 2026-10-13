@@ -30,7 +30,7 @@ interface WorldMapProps {
 const ACCENT = '#FF7A21';
 
 // plane silhouette pointing along positive x, about 22 units long
-const PLANE_PATH =
+export const PLANE_PATH =
   'M11 0C11-1 9-1.4 7-1.4L-9-1.2C-10.5-1.2-11-.6-11 0S-10.5 1.2-9 1.2L7 1.4C9 1.4 11 1 11 0Z' +
   'M2.5-1.3-3-10h-2.6l2.4 8.7ZM2.5 1.3-3 10h-2.6l2.4-8.7Z' +
   'M-7.4-1.2-9.8-5.2h-1.6l1 4ZM-7.4 1.2-9.8 5.2h-1.6l1-4Z';
@@ -85,7 +85,8 @@ const WorldMap = ({ frame, minSpan = 40, routes = [], markers = [], plane, dotCo
       h = w / aspect;
     }
     const cx = (minX + maxX) / 2;
-    const cy = Math.min(Math.max((minY + maxY) / 2, h / 2 - 8), WORLD_HEIGHT - h / 2 + 8);
+    // a view taller than the world just centres it, otherwise keep the frame from drifting off the map
+    const cy = h >= WORLD_HEIGHT ? WORLD_HEIGHT / 2 : Math.min(Math.max((minY + maxY) / 2, h / 2 - 8), WORLD_HEIGHT - h / 2 + 8);
     return { x: cx - w / 2, y: cy - h / 2, w, h };
   }, [frame, minSpan, size]);
 

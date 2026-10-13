@@ -6,6 +6,8 @@ import { getBoardingPrefs, saveBoardingPrefs } from '@/lib/storage';
 import { LonLat, distanceKm, formatDistance, getAirport, longHaulDestination, makeFlightNumber, randomDestination, routePoints, suggestDestinations } from '@/lib/flights';
 import { cn } from '@/lib/utils';
 import WorldMap, { MapMarker } from '@/components/map/WorldMap';
+import Globe from '@/components/map/LazyGlobe';
+import { supportsWebGL } from '@/lib/webgl';
 import Segmented from '@/components/ui/Segmented';
 
 const MIN_SECONDS = 10 * 60;
@@ -128,17 +130,33 @@ const BoardingSheet = () => {
     ...(kind === 'fixed' && choice !== 'surprise' ? options.map(o => [o.airport.lon, o.airport.lat] as LonLat) : []),
   ];
 
+  const flatMap = (
+    <WorldMap
+      className="absolute inset-0"
+      frame={frame}
+      minSpan={showTarget ? 36 : 80}
+      dotColor="#484848"
+      markers={markers}
+      routes={showTarget ? [{ points: routePoints(origin, target), variant: 'preview' }] : []}
+    />
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex bg-black animate-fade-in" role="dialog" aria-modal="true" aria-label={`Plan a flight for ${subject.name}`}>
       <div className="relative hidden flex-1 lg:block">
-        <WorldMap
-          className="absolute inset-0"
-          frame={frame}
-          minSpan={showTarget ? 36 : 80}
-          dotColor="#484848"
-          markers={markers}
-          routes={showTarget ? [{ points: routePoints(origin, target), variant: 'preview' }] : []}
-        />
+        {appSettings.flightView === 'globe' && supportsWebGL() ? (
+          <div className="absolute inset-0">
+            <Globe
+              fallback={flatMap}
+              route={showTarget ? { from: [origin.lon, origin.lat], to: [target.lon, target.lat] } : null}
+              focus={[origin.lon, origin.lat]}
+              camera="overview"
+              markers={markers.map(m => ({ at: [m.lon, m.lat] as LonLat, label: m.label, variant: m.variant }))}
+            />
+          </div>
+        ) : (
+          flatMap
+        )}
         <div className="pointer-events-none absolute inset-y-0 right-0 w-40 bg-gradient-to-l from-black to-transparent" />
         <div className="absolute left-8 top-8">
           <p className="label">Departing from</p>

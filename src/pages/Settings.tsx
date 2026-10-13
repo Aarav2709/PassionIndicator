@@ -4,9 +4,10 @@ import { useTimer } from '@/context/TimerContext';
 import { exportBackup, importBackup } from '@/lib/backup';
 import { eraseAllData } from '@/lib/storage';
 import { AIRPORTS, getAirport } from '@/lib/flights';
-import { AmbienceKind, DistanceUnit, SpeedUnit } from '@/lib/types';
+import { AmbienceKind, DistanceUnit, FlightView, SpeedUnit } from '@/lib/types';
 import Switch from '@/components/ui/Switch';
 import Segmented from '@/components/ui/Segmented';
+import { WEBGL_HELP, supportsWebGL } from '@/lib/webgl';
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <section className="mt-12 first:mt-10">
@@ -64,6 +65,11 @@ const SPEED_OPTIONS: { value: SpeedUnit; label: string }[] = [
   { value: 'kmh', label: 'km/h' },
   { value: 'mph', label: 'mph' },
   { value: 'kts', label: 'kts' },
+];
+
+const VIEW_OPTIONS: { value: FlightView; label: string }[] = [
+  { value: 'globe', label: 'Globe' },
+  { value: 'map', label: 'Flat map' },
 ];
 
 const AMBIENCE_OPTIONS: { value: AmbienceKind; label: string }[] = [
@@ -131,6 +137,9 @@ const Settings = () => {
           >
             Fly home
           </button>
+        </Row>
+        <Row label="Flight view" hint={supportsWebGL() ? 'How your plane is shown while you fly.' : WEBGL_HELP}>
+          <Segmented label="Flight view" value={appSettings.flightView} onChange={flightView => updateAppSettings({ flightView })} options={VIEW_OPTIONS} />
         </Row>
         <Row label="Distance">
           <Segmented label="Distance unit" value={appSettings.distanceUnit} onChange={distanceUnit => updateAppSettings({ distanceUnit })} options={DISTANCE_OPTIONS} />

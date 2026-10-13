@@ -7,6 +7,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        accent: '#FF7A21',
         subject: {
           math: '#FF7E36',
           science: '#FDB03C',
@@ -20,8 +21,18 @@ export default {
       },
       animation: {
         'fade-in': 'fadeIn 0.2s ease-out',
+        'print': 'print 0.9s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'rise': 'rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both',
       },
       keyframes: {
+        print: {
+          '0%': { clipPath: 'inset(0 0 100% 0)', transform: 'translateY(-16px)' },
+          '100%': { clipPath: 'inset(0 0 0 0)', transform: 'translateY(0)' },
+        },
+        rise: {
+          '0%': { opacity: '0', transform: 'translateY(12px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
         fadeIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' },

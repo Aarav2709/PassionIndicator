@@ -1,4 +1,5 @@
 import { TimerState, TimerEvent, PomodoroSettings, DEFAULT_POMODORO } from './types';
+import { distanceKm, flightProfile, getAirport } from './flights';
 
 export function createInitialState(): TimerState {
   return {
@@ -10,9 +11,12 @@ export function createInitialState(): TimerState {
     breakStartedAt: null,
     accumulatedFocus: 0,
     accumulatedBreak: 0,
+    maxFocusSegment: 0,
+    segments: [],
     isFullscreen: false,
     pomodoroCount: 0,
     pomodoroPhase: null,
+    flight: null,
   };
 }
 
@@ -21,14 +25,22 @@ function secondsSince(start: number | null, now: number): number {
 }
 
 function toBreak(state: TimerState, now: number, isFullscreen: boolean): TimerState {
+  const focused = secondsSince(state.focusStartedAt, now);
   return {
     ...state,
     mode: 'break',
     focusStartedAt: null,
     breakStartedAt: now,
-    accumulatedFocus: state.accumulatedFocus + secondsSince(state.focusStartedAt, now),
+    accumulatedFocus: state.accumulatedFocus + focused,
+    maxFocusSegment: Math.max(state.maxFocusSegment, focused),
+    segments: state.focusStartedAt ? [...state.segments, [state.focusStartedAt, now]] : state.segments,
     isFullscreen,
   };
+}
+
+// closed segments plus the one still running, ready to be saved
+export function currentSegments(state: TimerState, now: number = Date.now()): [number, number][] {
+  return state.mode === 'focusing' && state.focusStartedAt ? [...state.segments, [state.focusStartedAt, now]] : state.segments;
 }
 
 function toFocus(state: TimerState, now: number, isFullscreen: boolean): TimerState {
@@ -39,7 +51,7 @@ function toFocus(state: TimerState, now: number, isFullscreen: boolean): TimerSt
     breakStartedAt: null,
     accumulatedBreak: state.accumulatedBreak + secondsSince(state.breakStartedAt, now),
     isFullscreen,
-    pomodoroPhase: 'focus',
+    pomodoroPhase: state.pomodoroPhase === null ? null : 'focus',
   };
 }
 
@@ -47,7 +59,8 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
   const now = Date.now();
 
   switch (event.type) {
-    case 'START_SESSION':
+    case 'START_SESSION': {
+      const { plan } = event;
       return {
         ...createInitialState(),
         mode: 'focusing',
@@ -56,8 +69,20 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
         sessionStartedAt: now,
         focusStartedAt: now,
         isFullscreen: true,
-        pomodoroPhase: 'focus',
+        pomodoroPhase: plan.kind === 'pomodoro' ? 'focus' : null,
+        flight: {
+          kind: plan.kind,
+          flightNo: plan.flightNo,
+          todoId: plan.todoId,
+          from: event.from,
+          to: plan.to,
+          plannedSeconds: plan.plannedSeconds,
+          mystery: plan.mystery,
+          legFocusStart: 0,
+          legs: [],
+        },
       };
+    }
 
     case 'STOP_SESSION':
       return createInitialState();
@@ -68,24 +93,46 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
     case 'RESUME_SESSION':
       return state.mode === 'break' ? toFocus(state, now, true) : state;
 
+    // the plane lands, the leg is logged and a layover starts at the destination
     case 'POMODORO_FOCUS_COMPLETE': {
-      if (state.mode !== 'focusing') return state;
+      if (state.mode !== 'focusing' || !state.flight) return state;
       const pomodoroCount = state.pomodoroCount + 1;
       const isLongBreak = pomodoroCount % (event.settings.longBreakInterval || 4) === 0;
+      const next = toBreak(state, now, false);
+      const { flight } = state;
       return {
-        ...toBreak(state, now, false),
+        ...next,
         pomodoroCount,
         pomodoroPhase: isLongBreak ? 'longBreak' : 'shortBreak',
+        flight: {
+          ...flight,
+          from: flight.to,
+          legs: [
+            ...flight.legs,
+            {
+              from: flight.from,
+              to: flight.to,
+              focusSeconds: next.accumulatedFocus - flight.legFocusStart,
+              distanceKm: distanceKm(getAirport(flight.from), getAirport(flight.to)),
+            },
+          ],
+        },
       };
     }
 
-    case 'POMODORO_BREAK_COMPLETE':
-      if (state.mode !== 'break') return state;
-      return toFocus(state, now, true);
+    // boarding again after the layover, on to the next city
+    case 'POMODORO_BREAK_COMPLETE': {
+      if (state.mode !== 'break' || !state.flight) return state;
+      const next = toFocus(state, now, true);
+      return { ...next, flight: { ...state.flight, to: event.nextTo, legFocusStart: next.accumulatedFocus } };
+    }
 
+    // coming back to fullscreen ends a manual break, but a layover keeps its own clock
     case 'FULLSCREEN_ENTER':
       if (state.mode === 'idle') return state;
-      return state.mode === 'break' ? toFocus(state, now, true) : { ...state, isFullscreen: true };
+      return state.mode === 'break' && state.pomodoroPhase !== 'shortBreak' && state.pomodoroPhase !== 'longBreak'
+        ? toFocus(state, now, true)
+        : { ...state, isFullscreen: true };
 
     // leaving fullscreen while focusing counts as a break, like yeolpumta locking the phone
     case 'FULLSCREEN_EXIT':
@@ -100,32 +147,55 @@ export function timerReducer(state: TimerState, event: TimerEvent): TimerState {
 export interface DisplayTimes {
   currentFocus: number;
   currentBreak: number;
-  pomodoroRemaining: number;
+  maxFocusStreak: number;
+  // focus time on the current leg
+  legFocus: number;
+  // countdown for fixed flights and pomodoro rounds, null when the clock counts up
+  remaining: number | null;
+  // share of the current leg flown, from 0 to 1
+  progress: number;
+  speedKmh: number;
+  altitudeFt: number;
+  phase: 'ground' | 'taxi' | 'climb' | 'cruise' | 'descent';
 }
 
 export function getDisplayTimes(state: TimerState, settings: PomodoroSettings = DEFAULT_POMODORO): DisplayTimes {
   const now = Date.now();
+  const flight = state.flight;
 
-  if (state.mode === 'focusing') {
-    const elapsed = secondsSince(state.focusStartedAt, now);
-    return {
-      currentFocus: state.accumulatedFocus + elapsed,
-      currentBreak: state.accumulatedBreak,
-      pomodoroRemaining: Math.max(0, settings.focusDuration - elapsed),
-    };
+  if (state.mode === 'idle' || !flight) {
+    return { currentFocus: 0, currentBreak: 0, maxFocusStreak: 0, legFocus: 0, remaining: null, progress: 0, speedKmh: 0, altitudeFt: 0, phase: 'ground' };
   }
 
-  if (state.mode === 'break') {
-    const elapsed = secondsSince(state.breakStartedAt, now);
-    const breakLength = state.pomodoroPhase === 'longBreak' ? settings.longBreakDuration : settings.shortBreakDuration;
-    return {
-      currentFocus: state.accumulatedFocus,
-      currentBreak: state.accumulatedBreak + elapsed,
-      pomodoroRemaining: Math.max(0, breakLength - elapsed),
-    };
+  const focusing = state.mode === 'focusing';
+  const focusElapsed = focusing ? secondsSince(state.focusStartedAt, now) : 0;
+  const breakElapsed = focusing ? 0 : secondsSince(state.breakStartedAt, now);
+  const currentFocus = state.accumulatedFocus + focusElapsed;
+  const legFocus = currentFocus - flight.legFocusStart;
+  const onLayover = state.pomodoroPhase === 'shortBreak' || state.pomodoroPhase === 'longBreak';
+
+  const base = {
+    currentFocus,
+    currentBreak: state.accumulatedBreak + breakElapsed,
+    maxFocusStreak: Math.max(state.maxFocusSegment, focusElapsed),
+    legFocus,
+  };
+
+  if (flight.kind === 'pomodoro' && onLayover) {
+    const layover = state.pomodoroPhase === 'longBreak' ? settings.longBreakDuration : settings.shortBreakDuration;
+    return { ...base, remaining: Math.max(0, layover - breakElapsed), progress: 1, speedKmh: 0, altitudeFt: 0, phase: 'ground' };
   }
 
-  return { currentFocus: 0, currentBreak: 0, pomodoroRemaining: settings.focusDuration };
+  const total = flight.kind === 'pomodoro' ? settings.focusDuration : flight.kind === 'fixed' ? flight.plannedSeconds : null;
+  const profile = flightProfile(legFocus, total, distanceKm(getAirport(flight.from), getAirport(flight.to)));
+  return {
+    ...base,
+    remaining: total === null ? null : Math.max(0, total - legFocus),
+    progress: profile.progress,
+    speedKmh: profile.speedKmh,
+    altitudeFt: profile.altitudeFt,
+    phase: profile.phase,
+  };
 }
 
 export async function enterFullscreen(): Promise<boolean> {

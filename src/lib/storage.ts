@@ -2,9 +2,11 @@ import {
   Subject,
   Todo,
   Session,
-  TimerState,
   PomodoroSettings,
   DEFAULT_POMODORO,
+  AppSettings,
+  DEFAULT_APP_SETTINGS,
+  FlightKind,
   DB_NAME,
   DB_VERSION,
   STORES,
@@ -185,6 +187,10 @@ export async function saveSession(session: Session): Promise<void> {
   await idbPut(STORES.SESSIONS, session);
 }
 
+export async function deleteSession(id: string): Promise<void> {
+  await idbDelete<Session>(STORES.SESSIONS, id);
+}
+
 export async function createSession(subjectId: string): Promise<Session> {
   const session: Session = {
     id: generateId(),
@@ -198,33 +204,13 @@ export async function createSession(subjectId: string): Promise<Session> {
   return session;
 }
 
+export type SessionProgress = Pick<Session, 'focusDuration' | 'breakDuration' | 'maxFocusStreak' | 'segments' | 'flight'>;
+
 // writes progress for a running session, pass ended to close it
-export async function updateSessionProgress(
-  sessionId: string,
-  focusDuration: number,
-  breakDuration: number,
-  ended = false
-): Promise<void> {
+export async function updateSessionProgress(sessionId: string, progress: SessionProgress, ended = false): Promise<void> {
   const session = await idbGet<Session>(STORES.SESSIONS, sessionId);
   if (!session) return;
-  await saveSession({
-    ...session,
-    focusDuration,
-    breakDuration,
-    endedAt: ended ? Date.now() : session.endedAt,
-  });
-}
-
-export function saveTimerState(state: TimerState): void {
-  writeJSON(STORAGE_KEYS.ACTIVE_STATE, state);
-}
-
-export function getTimerState(): TimerState | null {
-  return readJSON<TimerState | null>(STORAGE_KEYS.ACTIVE_STATE, null);
-}
-
-export function clearTimerState(): void {
-  localStorage.removeItem(STORAGE_KEYS.ACTIVE_STATE);
+  await saveSession({ ...session, ...progress, endedAt: ended ? Date.now() : session.endedAt });
 }
 
 export function getPomodoroSettings(): PomodoroSettings {
@@ -233,6 +219,53 @@ export function getPomodoroSettings(): PomodoroSettings {
 
 export function savePomodoroSettings(settings: PomodoroSettings): void {
   writeJSON(STORAGE_KEYS.POMODORO_SETTINGS, settings);
+}
+
+export function getAppSettings(): AppSettings {
+  return { ...DEFAULT_APP_SETTINGS, ...readJSON<Partial<AppSettings>>(STORAGE_KEYS.APP_SETTINGS, {}) };
+}
+
+export function saveAppSettings(settings: AppSettings): void {
+  writeJSON(STORAGE_KEYS.APP_SETTINGS, settings);
+}
+
+// the airport the plane is parked at, where the next flight departs from
+export function getLocation(): string | null {
+  return readJSON<string | null>(STORAGE_KEYS.LOCATION, null);
+}
+
+export function saveLocation(code: string): void {
+  writeJSON(STORAGE_KEYS.LOCATION, code);
+}
+
+export interface BoardingPrefs {
+  kind: FlightKind;
+  plannedSeconds: number;
+}
+
+export function getBoardingPrefs(): BoardingPrefs {
+  return { kind: 'fixed', plannedSeconds: 3600, ...readJSON<Partial<BoardingPrefs>>(STORAGE_KEYS.BOARDING, {}) };
+}
+
+export function saveBoardingPrefs(prefs: BoardingPrefs): void {
+  writeJSON(STORAGE_KEYS.BOARDING, prefs);
+}
+
+export async function addTodoFocus(todoId: string, seconds: number): Promise<void> {
+  const todo = await idbGet<Todo>(STORES.TODOS, todoId);
+  if (todo) await saveTodo({ ...todo, focusSeconds: (todo.focusSeconds ?? 0) + seconds });
+}
+
+// wipes every subject, task, session and setting stored by the app in this browser
+export async function eraseAllData(): Promise<void> {
+  const db = await dbInitPromise?.catch(() => null);
+  db?.close();
+  dbInitPromise = null;
+  await new Promise<void>(resolve => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = request.onerror = request.onblocked = () => resolve();
+  });
+  for (const key of [...Object.values(STORAGE_KEYS), ...Object.values(STORES)]) localStorage.removeItem(key);
 }
 
 const DEFAULT_SUBJECTS = [

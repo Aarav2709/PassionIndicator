@@ -16,10 +16,18 @@ A minimal dark study timer for the web. Recreation of Yeolpumta for Desktop, but
 </table>
 
 ## What it does
-- The dashboard shows study time and subjects. 
-- Each subject can be started, renamed, or deleted, and choose different beautiful colors too!
-- Starting a subject opens a fullscreen timer view with a clear green state while studying and a red state while on break.
-- Leaving fullscreen or switching tabs automatically puts you on break, just like locking your phone in Yeolpumta.
-- Press Space in the study screen to pause or resume.
-- Saves your progress too!
-- It also has pomodoro mode! So choose whatever you like to use <3
+PassionIndicator mixes three apps: the flight metaphor of FocusFlight, the pomodoro rhythm of Pomofocus and the study tracking of Yeolpumta.
+
+- Every study session is a flight. Pick a subject, type how long you want to fly and choose from real routes with realistic flight times.
+- While you focus, your plane taxis, climbs, cruises and descends across a dot matrix world map with live speed and altitude.
+- Leaving fullscreen or switching tabs puts the flight in a holding pattern, just like locking your phone in Yeolpumta.
+- Three ways to fly: direct flights, pomodoro legs that hop from city to city with layovers, and open flights that run like a stopwatch.
+- Land early and you touch down at the nearest airport. Your plane stays where it landed, so the next flight departs from there.
+- A calm cabin or rain ambience plays while you fly.
+- The logbook keeps a map of your routes and every flight you have taken.
+- Yeolpumta style stats for each day, week and month, with a timeline planner, focus bars, a calendar heatmap, max focus and streaks.
+- Distances in km, mi or nm and speeds in km/h, mph or kts.
+- Everything stays in your browser. Export, import or erase your data from Settings. Installable as a desktop app and works offline.
+
+## Map data
+The world map is generated from Natural Earth via world-atlas. Run `node scripts/gen-world-dots.mjs` to rebuild `src/data/worldDots.ts`.
